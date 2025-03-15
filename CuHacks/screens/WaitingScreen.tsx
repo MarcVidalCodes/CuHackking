@@ -207,17 +207,17 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
   },
   durationButton: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 10,
+    padding: 0.5,
     borderRadius: 5,
   },
   durationText: {
     color: 'white',
-    fontSize: 20,
-    marginHorizontal: 15,
+    fontSize: 14,
+    marginHorizontal: 2,
   },
   saveButton: {
     backgroundColor: '#4CAF50',
