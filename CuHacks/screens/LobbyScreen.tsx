@@ -31,6 +31,13 @@ export default function LobbyScreen() {
     }
   };
 
+  const handleStartSinglePlayer = () => {
+    if (username.trim()) {
+      // Navigate to single player setup screen
+      navigation.navigate('SinglePlayerSetup', { username });
+    }
+  };
+
   const handleStartGame = () => {
     // Set starting flag but don't navigate yet
     setIsStartingGame(true);
@@ -58,7 +65,23 @@ export default function LobbyScreen() {
             value={username}
             onChangeText={setUsername}
           />
-          <Button title="Join Game" onPress={handleJoinGame} />
+          
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={[styles.button, styles.multiplayerButton]}
+              onPress={handleJoinGame}
+            >
+              <Text style={styles.buttonText}>Join Multiplayer</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.button, styles.singlePlayerButton]}
+              onPress={handleStartSinglePlayer}
+            >
+              <Text style={styles.buttonText}>Play with AI</Text>
+              <Text style={styles.buttonSubtext}>powered by Gemini</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <>
@@ -178,6 +201,33 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     padding: 10,
     marginBottom: 20,
+  },
+  buttonContainer: {
+    width: '100%',
+    flexDirection: 'column',
+    gap: 15,
+  },
+  button: {
+    width: '100%',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  multiplayerButton: {
+    backgroundColor: '#4285F4',
+  },
+  singlePlayerButton: {
+    backgroundColor: '#34A853',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonSubtext: {
+    color: 'white',
+    fontSize: 12,
+    opacity: 0.8,
   },
   waitingText: {
     fontSize: 18,
