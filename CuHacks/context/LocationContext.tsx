@@ -9,6 +9,10 @@ interface CurrentUser {
   isHost: boolean;
 }
 
+interface GameSettings {
+  duration: number; // in minutes
+}
+
 interface LocationContextType {
   myLocation: Coordinates | null;
   players: Player[];
@@ -16,12 +20,14 @@ interface LocationContextType {
   gameStarted: boolean;
   currentUser: CurrentUser | null;
   isHost: boolean;
+  gameTimeRemaining: number | null; // in seconds
   joinGame: (username: string) => void;
-  startGame: () => void;
+  startGame: (settings?: GameSettings) => void;
   updateLocation: (location: Coordinates) => void;
   transferHost: (playerId: string) => void;
   checkForTag: () => void;
   lastTagMessage: string | null;
+  updateGameSettings: (settings: GameSettings) => void;
 }
 
 const LocationContext = createContext<LocationContextType | null>(null);
@@ -34,8 +40,11 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [lastTagMessage, setLastTagMessage] = useState<string | null>(null);
+  const [gameSettings, setGameSettings] = useState<GameSettings>({ duration: 5 });
+  const [gameTimeRemaining, setGameTimeRemaining] = useState<number | null>(null);
   const locationSubscription = useRef<any>(null);
   const hasRequestedPermissions = useRef(false);
+  const gameTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Setup socket event handlers
   useEffect(() => {
@@ -213,6 +222,72 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     }
   }, [gameStarted, players, currentUser?.id]); // Re-run when game starts or player status changes
 
+  // Set up game timer when game starts
+  useEffect(() => {
+    if (gameStarted && gameSettings.duration > 0) {
+      // Convert minutes to seconds
+      const initialSeconds = gameSettings.duration * 60;
+      console.log("Setting initial game time:", initialSeconds);
+      setGameTimeRemaining(initialSeconds);
+      
+      // Start the timer
+      gameTimerRef.current = setInterval(() => {
+        setGameTimeRemaining(prev => {
+          // Ensure prev is a valid number
+          if (prev === null || isNaN(prev) || prev <= 1) {
+            // End the game when timer hits 0
+            if (gameTimerRef.current) {
+              clearInterval(gameTimerRef.current);
+            }
+            
+            // Emit game ended event to server if current user is host
+            if (isHost) {
+              socketService.emit('gameEnded', { reason: 'timeUp' });
+            }
+            
+            // Navigate back to lobby
+            setGameStarted(false);
+            
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      // Reset timer when game is not active
+      setGameTimeRemaining(null);
+    }
+
+    return () => {
+      if (gameTimerRef.current) {
+        clearInterval(gameTimerRef.current);
+        gameTimerRef.current = null;
+      }
+    };
+  }, [gameStarted, gameSettings.duration, isHost]);
+
+  // Listen for game ended event
+  useEffect(() => {
+    const gameEndedHandler = (data: any) => {
+      console.log('Game ended:', data);
+      
+      // Clean up timer
+      if (gameTimerRef.current) {
+        clearInterval(gameTimerRef.current);
+      }
+      
+      // Reset game state
+      setGameStarted(false);
+      setGameTimeRemaining(null);
+    };
+
+    socketService.on('gameEnded', gameEndedHandler);
+
+    return () => {
+      socketService.off('gameEnded', gameEndedHandler);
+    };
+  }, []);
+
   const joinGame = (username: string) => {
     const socketId = socketService.getSocketId();
     if (!socketId) {
@@ -230,14 +305,20 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     socketService.joinGame(username);
   };
 
-  const startGame = () => {
+  const startGame = (settings?: GameSettings) => {
     if (!isHost) {
       setError("Only the host can start the game");
       return;
     }
     
-    console.log("Starting game as host");
-    socketService.startGame();
+    // Update settings if provided
+    if (settings) {
+      console.log("Updating game settings:", settings);
+      setGameSettings(prev => ({ ...prev, ...settings }));
+    }
+    
+    console.log("Starting game as host with settings:", settings || gameSettings);
+    socketService.emit('startGame', settings || gameSettings);
     
     // Delay setting gameStarted to allow server events to arrive
     setTimeout(() => {
@@ -262,6 +343,12 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     socketService.emit('checkTag');
   };
 
+  const updateGameSettings = (settings: GameSettings) => {
+    setGameSettings(prev => ({ ...prev, ...settings }));
+    // Notify server about settings update
+    socketService.emit('updateGameSettings', settings);
+  };
+
   return (
     <LocationContext.Provider 
       value={{ 
@@ -271,12 +358,14 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
         gameStarted,
         currentUser,
         isHost,
+        gameTimeRemaining,
         joinGame, 
         startGame, 
         updateLocation,
         transferHost,
         checkForTag,
-        lastTagMessage
+        lastTagMessage,
+        updateGameSettings
       }}
     >
       {children}

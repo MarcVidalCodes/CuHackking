@@ -28,7 +28,11 @@ const io = new Server(server, {
 // Game state
 let gameState = {
   gameInProgress: false,
-  players: []
+  players: [],
+  settings: {
+    duration: 5 // Default 5 minutes
+  },
+  endTimerId: null
 };
 
 // Change these variables near the top of your server file
@@ -130,15 +134,36 @@ io.on('connection', (socket) => {
   });
 
   // Handle game start
-  socket.on('startGame', () => {
+  socket.on('startGame', (settings) => {
     const player = gameState.players.find(p => p.id === socket.id);
     if (!player || !player.isHost) {
       console.log(`Player ${socket.id} attempted to start game but is not host`);
       return; // Only host can start game
     }
     
-    console.log('Game started by host');
+    console.log('Game started by host with settings:', settings);
     gameState.gameInProgress = true;
+    
+    // Update game settings if provided
+    if (settings) {
+      gameState.settings = { ...gameState.settings, ...settings };
+    }
+    
+    // Clear any existing end timer
+    if (gameState.endTimerId) {
+      clearTimeout(gameState.endTimerId);
+    }
+    
+    // Set up game end timer
+    const durationMs = (gameState.settings.duration || 5) * 60 * 1000;
+    console.log(`Setting game timer for ${gameState.settings.duration} minutes`);
+    
+    gameState.endTimerId = setTimeout(() => {
+      if (gameState.gameInProgress) {
+        console.log('Game ended due to time limit');
+        endGame('timeUp');
+      }
+    }, durationMs);
     
     // Make sure at least one player is "it"
     if (gameState.players.length > 0) {
@@ -279,6 +304,32 @@ io.on('connection', (socket) => {
       console.log(`No players in range for ${currentPlayer.username} to tag`);
     }
   });
+
+  // Handle game settings update
+  socket.on('updateGameSettings', (settings) => {
+    const player = gameState.players.find(p => p.id === socket.id);
+    if (!player || !player.isHost) {
+      console.log(`Player ${socket.id} attempted to update settings but is not host`);
+      return; // Only host can update settings
+    }
+    
+    console.log('Game settings updated:', settings);
+    gameState.settings = { ...gameState.settings, ...settings };
+    
+    // Broadcast updated settings to all clients
+    io.emit('gameSettingsUpdated', gameState.settings);
+  });
+
+  // Handle game end request
+  socket.on('gameEnded', (data) => {
+    const player = gameState.players.find(p => p.id === socket.id);
+    if (!player || !player.isHost) {
+      console.log(`Player ${socket.id} attempted to end game but is not host`);
+      return; // Only host can end game
+    }
+    
+    endGame(data.reason || 'hostEnded');
+  });
 });
 
 // Set up a periodic cleanup process to check for disconnected players
@@ -334,3 +385,20 @@ const throttledEmitUpdate = () => {
     lastUpdateBroadcast = now;
   }
 };
+
+// End game function
+function endGame(reason) {
+  if (!gameState.gameInProgress) return;
+  
+  console.log(`Game ended: ${reason}`);
+  gameState.gameInProgress = false;
+  
+  // Clear any existing end timer
+  if (gameState.endTimerId) {
+    clearTimeout(gameState.endTimerId);
+    gameState.endTimerId = null;
+  }
+  
+  // Broadcast game end to all clients
+  io.emit('gameEnded', { reason });
+}

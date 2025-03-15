@@ -5,9 +5,16 @@ import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
 import GameStatusBar from '../components/GameStatusBar';
 import PlayersList from '../components/PlayersList';
+import { formatTime } from '../utils/timeUtils';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation';
+
+type GameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Game'>;
 
 export default function GameScreen() {
-  const { myLocation, players, currentUser, error, lastTagMessage, checkForTag } = useLocation();
+  const { myLocation, players, currentUser, error, lastTagMessage, checkForTag, gameTimeRemaining, gameStarted } = useLocation();
+  const navigation = useNavigation<GameScreenNavigationProp>();
   const mapRef = useRef<MapView | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapKey, setMapKey] = useState(1); // Add a key to force remount if needed
@@ -56,6 +63,19 @@ export default function GameScreen() {
     return () => clearTimeout(mapErrorTimeout);
   }, [mapReady]);
 
+  // Effect to handle game end navigation
+  useEffect(() => {
+    if (!gameStarted) {
+      // Navigate back to lobby when game ends
+      navigation.replace('Lobby');
+    }
+  }, [gameStarted, navigation]);
+
+  // Add console log to debug
+  useEffect(() => {
+    console.log("Current time remaining:", gameTimeRemaining);
+  }, [gameTimeRemaining]);
+
   // Find the player who is "it"
   const itPlayer = players.find(player => player.isIt);
   
@@ -93,6 +113,9 @@ export default function GameScreen() {
       />
     ));
   };
+
+  // Format time for display
+  const formattedTime = gameTimeRemaining !== null ? formatTime(gameTimeRemaining) : '--:--';
 
   if (error) {
     return (
@@ -178,6 +201,7 @@ export default function GameScreen() {
         itPlayerName={itPlayer?.username || 'Unknown'} 
         isCurrentPlayerIt={isCurrentPlayerIt}
         playersCount={players.length}
+        timeRemaining={gameTimeRemaining}
       />
 
       <PlayersList 

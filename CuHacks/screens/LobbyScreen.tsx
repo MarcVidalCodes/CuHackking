@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Button, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Button, FlatList, ActivityIndicator, Modal, TouchableOpacity } from 'react-native';
 import { useLocation } from '../context/LocationContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -12,7 +12,9 @@ export default function LobbyScreen() {
   const [username, setUsername] = useState('');
   const [hasJoined, setHasJoined] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
-  const { players, joinGame, startGame, currentUser, gameStarted, isHost, error } = useLocation();
+  const [showSettings, setShowSettings] = useState(false);
+  const [gameDuration, setGameDuration] = useState(5); // Default 5 minutes
+  const { players, joinGame, startGame, currentUser, gameStarted, isHost, error, updateGameSettings } = useLocation();
   const navigation = useNavigation<LobbyScreenNavigationProp>();
 
   useEffect(() => {
@@ -32,8 +34,14 @@ export default function LobbyScreen() {
   const handleStartGame = () => {
     // Set starting flag but don't navigate yet
     setIsStartingGame(true);
-    startGame();
+    // Pass game settings when starting the game
+    startGame({ duration: gameDuration });
     // The navigation happens in the useEffect when gameStarted becomes true
+  };
+
+  const handleUpdateSettings = () => {
+    updateGameSettings({ duration: gameDuration });
+    setShowSettings(false);
   };
 
   return (
@@ -57,6 +65,15 @@ export default function LobbyScreen() {
           <Text style={styles.waitingText}>
             {players.length > 0 ? `Players in lobby: ${players.length}` : 'Waiting for players to join...'}
           </Text>
+          
+          {isHost && (
+            <TouchableOpacity 
+              style={styles.settingsButton}
+              onPress={() => setShowSettings(true)}
+            >
+              <Text style={styles.settingsButtonText}>⚙️ Game Settings</Text>
+            </TouchableOpacity>
+          )}
           
           <FlatList
             data={players}
@@ -87,6 +104,47 @@ export default function LobbyScreen() {
               <Text style={styles.waitingHostText}>Waiting for host to start game...</Text>
             </View>
           )}
+          
+          {/* Game Settings Modal */}
+          <Modal
+            visible={showSettings}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setShowSettings(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Game Settings</Text>
+                
+                <View style={styles.settingRow}>
+                  <Text style={styles.settingLabel}>Game Duration (minutes):</Text>
+                  <View style={styles.durationControls}>
+                    <TouchableOpacity 
+                      style={styles.durationButton}
+                      onPress={() => setGameDuration(Math.max(1, gameDuration - 1))}
+                    >
+                      <Text style={styles.durationButtonText}>-</Text>
+                    </TouchableOpacity>
+                    
+                    <Text style={styles.durationText}>{gameDuration}</Text>
+                    
+                    <TouchableOpacity 
+                      style={styles.durationButton}
+                      onPress={() => setGameDuration(gameDuration + 1)}
+                    >
+                      <Text style={styles.durationButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                
+                <View style={styles.modalButtons}>
+                  <Button title="Cancel" onPress={() => setShowSettings(false)} />
+                  <View style={{ width: 20 }} />
+                  <Button title="Save Settings" onPress={handleUpdateSettings} />
+                </View>
+              </View>
+            </View>
+          </Modal>
         </>
       )}
     </View>
@@ -148,5 +206,74 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 16,
     color: '#4285F4',
+  },
+  settingsButton: {
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    marginVertical: 10,
+    alignSelf: 'center',
+  },
+  settingsButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  settingRow: {
+    marginBottom: 20,
+  },
+  settingLabel: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  durationControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durationButton: {
+    backgroundColor: '#e0e0e0',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  durationButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  durationText: {
+    fontSize: 18,
+    marginHorizontal: 20,
+    fontWeight: 'bold',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
   }
 });
