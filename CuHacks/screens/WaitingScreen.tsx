@@ -17,7 +17,7 @@ export default function WaitingScreen() {
 
   useEffect(() => {
     if (gameStarted) {
-      navigation.replace('Game');
+      navigation.replace('Loading');
     }
   }, [gameStarted, navigation]);
 
@@ -32,7 +32,7 @@ export default function WaitingScreen() {
   const handleStartGame = async () => {
     updateGameSettings({ duration: gameDuration });
     await startGame();
-    navigation.replace('Game');
+    navigation.replace('Loading'); // Navigate to loading instead of game
   };
 
   return (

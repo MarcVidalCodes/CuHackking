@@ -7,12 +7,14 @@ import GameScreen from '../screens/GameScreen';
 import WaitingScreen from '../screens/WaitingScreen';
 import TermsScreen from '../screens/TermsScreen';
 import SinglePlayerSetupScreen from '../screens/SinglePlayerSetupScreen';
+import LoadingScreen from '../screens/LoadingScreen';
 import { useLocation } from '../context/LocationContext';
 
 export type RootStackParamList = {
   Terms: undefined;
   Lobby: undefined;
   Waiting: undefined;
+  Loading: undefined;
   Game: undefined;
   SinglePlayerSetup: { username: string };
   // ...other screens
@@ -40,6 +42,11 @@ export default function Navigation() {
         <Stack.Screen 
           name="Waiting" 
           component={WaitingScreen} 
+        />
+        <Stack.Screen 
+          name="Loading" 
+          component={LoadingScreen}
+          options={{ headerShown: false }}
         />
         <Stack.Screen 
           name="Game" 
