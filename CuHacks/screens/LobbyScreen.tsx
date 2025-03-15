@@ -5,6 +5,8 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation';
 import PlayerItem from '../components/PlayerItem';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 type LobbyScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Lobby'>;
 
@@ -52,278 +54,110 @@ export default function LobbyScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tag Game Lobby</Text>
-      
-      {error && <Text style={styles.errorText}>{error}</Text>}
-      
-      {!hasJoined ? (
-        <View style={styles.joinForm}>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your username"
-            value={username}
-            onChangeText={setUsername}
-          />
-          
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.button, styles.multiplayerButton]}
-              onPress={handleJoinGame}
-            >
-              <Text style={styles.buttonText}>Join Multiplayer</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.button, styles.singlePlayerButton]}
-              onPress={handleStartSinglePlayer}
-            >
-              <Text style={styles.buttonText}>Play with AI</Text>
-              <Text style={styles.buttonSubtext}>powered by Gemini</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : (
-        <>
-          <Text style={styles.waitingText}>
-            {players.length > 0 ? `Players in lobby: ${players.length}` : 'Waiting for players to join...'}
-          </Text>
-          
-          {isHost && (
-            <TouchableOpacity 
-              style={styles.settingsButton}
-              onPress={() => setShowSettings(true)}
-            >
-              <Text style={styles.settingsButtonText}>⚙️ Game Settings</Text>
-            </TouchableOpacity>
-          )}
-          
-          <FlatList
-            data={players}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <PlayerItem 
-                player={item}
-                isCurrentUser={currentUser?.id === item.id}
-              />
-            )}
-            style={styles.playerList}
-          />
-          
-          {isStartingGame ? (
-            <View style={styles.startingContainer}>
-              <ActivityIndicator size="small" color="#4285F4" />
-              <Text style={styles.startingText}>Starting game...</Text>
-            </View>
-          ) : isHost ? (
-            <Button 
-              title="Start Game" 
-              onPress={handleStartGame} 
-              disabled={players.length < 1}
-            />
-          ) : (
-            <View style={styles.waitingContainer}>
-              <ActivityIndicator size="small" color="#0000ff" />
-              <Text style={styles.waitingHostText}>Waiting for host to start game...</Text>
-            </View>
-          )}
-          
-          {/* Game Settings Modal */}
-          <Modal
-            visible={showSettings}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={() => setShowSettings(false)}
+    <LinearGradient
+      colors={['#4c669f', '#3b5998', '#192f6a']}
+      style={styles.container}
+    >
+      <View style={styles.content}>
+        <Text style={styles.title}>TAG ROYALE</Text>
+        <Text style={styles.subtitle}>Ready to play?</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your username"
+          placeholderTextColor="#rgba(255,255,255,0.7)"
+          value={username}
+          onChangeText={setUsername}
+        />
+
+        {!hasJoined ? (
+          <TouchableOpacity 
+            style={styles.button}
+            onPress={handleJoinGame}
           >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Game Settings</Text>
-                
-                <View style={styles.settingRow}>
-                  <Text style={styles.settingLabel}>Game Duration (minutes):</Text>
-                  <View style={styles.durationControls}>
-                    <TouchableOpacity 
-                      style={styles.durationButton}
-                      onPress={() => setGameDuration(Math.max(1, gameDuration - 1))}
-                    >
-                      <Text style={styles.durationButtonText}>-</Text>
-                    </TouchableOpacity>
-                    
-                    <Text style={styles.durationText}>{gameDuration}</Text>
-                    
-                    <TouchableOpacity 
-                      style={styles.durationButton}
-                      onPress={() => setGameDuration(gameDuration + 1)}
-                    >
-                      <Text style={styles.durationButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                
-                <View style={styles.modalButtons}>
-                  <Button title="Cancel" onPress={() => setShowSettings(false)} />
-                  <View style={{ width: 20 }} />
-                  <Button title="Save Settings" onPress={handleUpdateSettings} />
-                </View>
-              </View>
-            </View>
-          </Modal>
-        </>
-      )}
-    </View>
+            <MaterialIcons name="play-circle-filled" size={24} color="white" />
+            <Text style={styles.buttonText}>Join Game</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.gameControls}>
+            {isHost && (
+              <TouchableOpacity 
+                style={[styles.button, styles.startButton]}
+                onPress={handleStartGame}
+                disabled={isStartingGame}
+              >
+                <MaterialIcons name="sports" size={24} color="white" />
+                <Text style={styles.buttonText}>
+                  {isStartingGame ? 'Starting...' : 'Start Game'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  content: {
+    flex: 1,
     padding: 20,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: 48,
     fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  errorText: {
-    color: 'red',
+    color: 'white',
     marginBottom: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
-  joinForm: {
-    width: '100%',
-    alignItems: 'center',
+  subtitle: {
+    fontSize: 24,
+    color: 'white',
+    marginBottom: 40,
+    opacity: 0.9,
   },
   input: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    padding: 10,
+    width: '80%',
+    height: 50,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    fontSize: 18,
+    color: 'white',
     marginBottom: 20,
-  },
-  buttonContainer: {
-    width: '100%',
-    flexDirection: 'column',
-    gap: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   button: {
-    width: '100%',
-    padding: 15,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginVertical: 10,
+    width: '80%',
+    justifyContent: 'center',
   },
-  multiplayerButton: {
-    backgroundColor: '#4285F4',
-  },
-  singlePlayerButton: {
-    backgroundColor: '#34A853',
+  startButton: {
+    backgroundColor: '#4CAF50',
   },
   buttonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  buttonSubtext: {
-    color: 'white',
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  waitingText: {
     fontSize: 18,
-    marginVertical: 20,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
-  playerList: {
+  gameControls: {
     width: '100%',
-    marginVertical: 20,
-  },
-  waitingContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-  },
-  waitingHostText: {
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#555',
-  },
-  startingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-  },
-  startingText: {
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#4285F4',
-  },
-  settingsButton: {
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    marginVertical: 10,
-    alignSelf: 'center',
-  },
-  settingsButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    padding: 20,
-    width: '80%',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  settingRow: {
-    marginBottom: 20,
-  },
-  settingLabel: {
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  durationControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  durationButton: {
-    backgroundColor: '#e0e0e0',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  durationButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  durationText: {
-    fontSize: 18,
-    marginHorizontal: 20,
-    fontWeight: 'bold',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
   }
 });

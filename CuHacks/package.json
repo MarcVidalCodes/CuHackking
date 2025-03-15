@@ -13,6 +13,7 @@
     "@react-navigation/native-stack": "^7.2.1",
     "@react-navigation/stack": "^7.1.2",
     "expo": "~52.0.38",
+    "expo-linear-gradient": "^14.0.2",
     "expo-location": "^18.0.8",
     "expo-status-bar": "~2.0.1",
     "geolib": "^3.3.4",
