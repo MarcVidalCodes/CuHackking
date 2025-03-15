@@ -39,11 +39,11 @@ export default function TermsScreen() {
         <Text style={styles.termsText}>
           Welcome to Tag Royale!{'\n\n'}
           By using this application, you agree to the following terms:{'\n\n'}
-          1. Location Services: i know where you live{'\n\n'}
-          2. Data Usage: MMMMMMMMMMMM DATA, YUMMY YUMMY FOR MY TUMMY{'\n\n'}
-          3. Fair Play: no hacking noob{'\n\n'}
-          4. Safety: You know what they say, safety third{'\n\n'}
-          5. Privacy: we are the government, you don't have privacy
+          1. Location Services: This app requires access to your device's location services to function properly.{'\n\n'}
+          2. Data Usage: Your location data will be shared with other players during gameplay.{'\n\n'}
+          3. Fair Play: You agree to play fairly and not exploit any game mechanics.{'\n\n'}
+          4. Safety: You are responsible for your own safety while playing the game.{'\n\n'}
+          5. Privacy: Your location data will only be used during active gameplay sessions.
         </Text>
       </ScrollView>
 
