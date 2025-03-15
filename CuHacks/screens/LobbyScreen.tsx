@@ -53,13 +53,20 @@ export default function LobbyScreen() {
     setShowSettings(false);
   };
 
+  const handleSinglePlayer = () => {
+    if (username.trim()) {
+      joinGame(username, true); // true for singleplayer mode
+      setHasJoined(true);
+    }
+  };
+
   return (
     <LinearGradient
       colors={['#4c669f', '#3b5998', '#192f6a']}
       style={styles.container}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>TAG ROYALE</Text>
+        <Text style={styles.title}>TAG GAME</Text>
         <Text style={styles.subtitle}>Ready to play?</Text>
 
         <TextInput
@@ -71,13 +78,23 @@ export default function LobbyScreen() {
         />
 
         {!hasJoined ? (
-          <TouchableOpacity 
-            style={styles.button}
-            onPress={handleJoinGame}
-          >
-            <MaterialIcons name="play-circle-filled" size={24} color="white" />
-            <Text style={styles.buttonText}>Join Game</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity 
+              style={styles.button}
+              onPress={handleJoinGame}
+            >
+              <MaterialIcons name="groups" size={24} color="white" />
+              <Text style={styles.buttonText}>Multiplayer</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.button, styles.singlePlayerButton]}
+              onPress={handleSinglePlayer}
+            >
+              <MaterialIcons name="person" size={24} color="white" />
+              <Text style={styles.buttonText}>Single Player</Text>
+            </TouchableOpacity>
+          </>
         ) : (
           <View style={styles.gameControls}>
             {isHost && (
@@ -159,5 +176,9 @@ const styles = StyleSheet.create({
   gameControls: {
     width: '100%',
     alignItems: 'center',
-  }
+  },
+  singlePlayerButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.6)', // Green tint
+    marginTop: 10,
+  },
 });
