@@ -9,6 +9,7 @@ import SinglePlayerSetupScreen from '../screens/SinglePlayerSetupScreen';
 import { useLocation } from '../context/LocationContext';
 
 export type RootStackParamList = {
+  Terms: undefined;
   Lobby: undefined;
   Game: undefined;
   SinglePlayerSetup: { username: string };
@@ -22,7 +23,17 @@ export default function Navigation() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Lobby">
+      <Stack.Navigator 
+        initialRouteName="Terms"
+        screenOptions={{
+          headerShown: false,
+          gestureEnabled: false
+        }}
+      >
+        <Stack.Screen 
+          name="Terms" 
+          component={TermsScreen} 
+        />
         <Stack.Screen 
           name="Lobby" 
           component={LobbyScreen} 
