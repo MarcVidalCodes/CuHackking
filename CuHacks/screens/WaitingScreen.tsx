@@ -92,92 +92,98 @@ export default function WaitingScreen() {
             <Text style={styles.modalTitle}>Game Settings</Text>
             
             <View style={styles.settingItem}>
-              <Text style={styles.settingLabel}>Game Duration (minutes)</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setGameDuration(Math.max(1, gameDuration - 1))}
-              >
-                <MaterialIcons name="remove" size={24} color="white" />
-              </TouchableOpacity>
-              <Text style={styles.durationText}>{gameDuration}</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setGameDuration(gameDuration + 1)}
-              >
-                <MaterialIcons name="add" size={24} color="white" />
-              </TouchableOpacity>
+              <Text style={styles.settingLabel}>Game Duration (min)</Text>
+              <View style={styles.settingControls}>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setGameDuration(Math.max(1, gameDuration - 1))}
+                >
+                  <MaterialIcons name="remove" size={20} color="white" />
+                </TouchableOpacity>
+                <Text style={styles.durationText}>{gameDuration}</Text>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setGameDuration(gameDuration + 1)}
+                >
+                  <MaterialIcons name="add" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
             
-            {/* Add new setting for initial circle size */}
             <View style={styles.settingItem}>
-              <Text style={styles.settingLabel}>Initial Safe Zone Size (meters)</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setInitialCircleSize(Math.max(50, initialCircleSize - 10))}
-              >
-                <MaterialIcons name="remove" size={24} color="white" />
-              </TouchableOpacity>
-              <Text style={styles.durationText}>{initialCircleSize}</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setInitialCircleSize(initialCircleSize + 10)}
-              >
-                <MaterialIcons name="add" size={24} color="white" />
-              </TouchableOpacity>
+              <Text style={styles.settingLabel}>Initial Safe Zone (m)</Text>
+              <View style={styles.settingControls}>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setInitialCircleSize(Math.max(50, initialCircleSize - 10))}
+                >
+                  <MaterialIcons name="remove" size={20} color="white" />
+                </TouchableOpacity>
+                <Text style={styles.durationText}>{initialCircleSize}</Text>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setInitialCircleSize(initialCircleSize + 10)}
+                >
+                  <MaterialIcons name="add" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* New setting for circle shrink percentage - updated label for clarity */}
             <View style={styles.settingItem}>
-              <Text style={styles.settingLabel}>Circle Shrinks By (% of current size)</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setCircleShrinkPercent(Math.max(10, circleShrinkPercent - 5))}
-              >
-                <MaterialIcons name="remove" size={24} color="white" />
-              </TouchableOpacity>
-              <Text style={styles.durationText}>{circleShrinkPercent}%</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setCircleShrinkPercent(Math.min(50, circleShrinkPercent + 5))}
-              >
-                <MaterialIcons name="add" size={24} color="white" />
-              </TouchableOpacity>
+              <Text style={styles.settingLabel}>Shrink By (%)</Text>
+              <View style={styles.settingControls}>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setCircleShrinkPercent(Math.max(10, circleShrinkPercent - 5))}
+                >
+                  <MaterialIcons name="remove" size={20} color="white" />
+                </TouchableOpacity>
+                <Text style={styles.durationText}>{circleShrinkPercent}</Text>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setCircleShrinkPercent(Math.min(50, circleShrinkPercent + 5))}
+                >
+                  <MaterialIcons name="add" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
             
-            {/* New setting for shrink duration */}
             <View style={styles.settingItem}>
-              <Text style={styles.settingLabel}>Shrink Duration (seconds)</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setShrinkDuration(Math.max(1, shrinkDuration - 1))}
-              >
-                <MaterialIcons name="remove" size={24} color="white" />
-              </TouchableOpacity>
-              <Text style={styles.durationText}>{shrinkDuration}</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setShrinkDuration(shrinkDuration + 1)}
-              >
-                <MaterialIcons name="add" size={24} color="white" />
-              </TouchableOpacity>
+              <Text style={styles.settingLabel}>Shrink Duration (sec)</Text>
+              <View style={styles.settingControls}>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setShrinkDuration(Math.max(1, shrinkDuration - 1))}
+                >
+                  <MaterialIcons name="remove" size={20} color="white" />
+                </TouchableOpacity>
+                <Text style={styles.durationText}>{shrinkDuration}</Text>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setShrinkDuration(shrinkDuration + 1)}
+                >
+                  <MaterialIcons name="add" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* New setting for shrink interval */}
             <View style={styles.settingItem}>
-              <Text style={styles.settingLabel}>Circle Shrinks Every (seconds)</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setShrinkInterval(Math.max(5, shrinkInterval - 1))}
-              >
-                <MaterialIcons name="remove" size={24} color="white" />
-              </TouchableOpacity>
-              <Text style={styles.durationText}>{shrinkInterval}</Text>
-              <TouchableOpacity 
-                style={styles.durationButton}
-                onPress={() => setShrinkInterval(shrinkInterval + 1)}
-              >
-                <MaterialIcons name="add" size={24} color="white" />
-              </TouchableOpacity>
+              <Text style={styles.settingLabel}>Shrink Interval (sec)</Text>
+              <View style={styles.settingControls}>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setShrinkInterval(Math.max(5, shrinkInterval - 1))}
+                >
+                  <MaterialIcons name="remove" size={20} color="white" />
+                </TouchableOpacity>
+                <Text style={styles.durationText}>{shrinkInterval}</Text>
+                <TouchableOpacity 
+                  style={styles.durationButton}
+                  onPress={() => setShrinkInterval(shrinkInterval + 1)}
+                >
+                  <MaterialIcons name="add" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
             
             <TouchableOpacity 
@@ -271,35 +277,47 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#3b5998',
-    padding: 20,
+    padding: 15,
     borderRadius: 15,
-    width: '80%',
+    width: '85%',
+    maxHeight: '80%',
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 22,
     color: 'white',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   settingLabel: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 13,
+    flex: 1,
+    marginRight: 8,
+  },
+  settingControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   durationButton: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 0.5,
+    padding: 6,
     borderRadius: 5,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   durationText: {
     color: 'white',
     fontSize: 14,
-    marginHorizontal: 2,
+    width: 30,
+    textAlign: 'center',
   },
   saveButton: {
     backgroundColor: '#4CAF50',
