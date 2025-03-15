@@ -19,12 +19,9 @@ export type RootStackParamList = {
 const Stack = createStackNavigator<RootStackParamList>();
 
 export default function Navigation() {
-  const { gameStarted } = useLocation();
-
   return (
     <NavigationContainer>
       <Stack.Navigator 
-        initialRouteName="Terms"
         screenOptions={{
           headerShown: false,
           gestureEnabled: false
@@ -37,29 +34,10 @@ export default function Navigation() {
         <Stack.Screen 
           name="Lobby" 
           component={LobbyScreen} 
-          options={{ 
-            title: 'Game Lobby',
-            headerShown: !gameStarted
-          }} 
         />
         <Stack.Screen 
           name="Game" 
           component={GameScreen} 
-          options={{ 
-            title: 'Live Tag Game',
-            headerShown: false
-          }}
-        />
-        <Stack.Screen 
-          name="SinglePlayerSetup" 
-          component={SinglePlayerSetupScreen} 
-          options={{ 
-            title: 'AI Game Setup',
-            headerStyle: {
-              backgroundColor: '#34A853',
-            },
-            headerTintColor: '#fff'
-          }} 
         />
       </Stack.Navigator>
     </NavigationContainer>
