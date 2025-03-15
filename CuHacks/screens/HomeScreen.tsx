@@ -1,17 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useLocation } from '../context/LocationContext';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const { username, setUsername, myLocation, error } = useLocation();
+  const { myLocation, error, joinGame } = useLocation();
+  const [username, setUsername] = useState('');
 
   const handleJoinGame = () => {
     if (username.trim().length === 0) {
       alert('Please enter a username');
       return;
     }
+    
+    joinGame(username);
     navigation.navigate('Lobby' as never);
   };
 
