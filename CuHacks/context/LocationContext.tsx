@@ -4,6 +4,35 @@ import { Coordinates, Player, GameState } from '../types';
 import socketService from '../services/socketService';
 import aiPlayerManager from '../services/aiPlayerManager';
 
+// Extract the location permission logic to a reusable function
+const requestLocationPermissions = async () => {
+  console.log("Requesting location permissions...");
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  
+  if (status !== 'granted') {
+    throw new Error('Permission to access location was denied');
+  }
+  
+  console.log("Location permission granted");
+  try {
+    // Get initial location
+    const initialLocation = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced
+    });
+    
+    const location = {
+      latitude: initialLocation.coords.latitude,
+      longitude: initialLocation.coords.longitude
+    };
+    
+    console.log("Initial location:", location);
+    return location;
+  } catch (err) {
+    console.error("Location error:", err);
+    throw new Error('Failed to get location'); 
+  }
+};
+
 interface CurrentUser {
   id: string;
   username: string;
@@ -140,30 +169,11 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
         // Set this first to prevent multiple requests
         hasRequestedPermissions.current = true;
         
-        console.log("Requesting location permissions...");
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        
-        if (status !== 'granted') {
-          setError('Permission to access location was denied');
-          return;
-        }
-
-        console.log("Location permission granted");
         try {
-          // Get initial location
-          const initialLocation = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced
-          });
-          
-          const location = {
-            latitude: initialLocation.coords.latitude,
-            longitude: initialLocation.coords.longitude
-          };
-          
-          console.log("Initial location:", location);
+          const location = await requestLocationPermissions();
           setMyLocation(location);
           socketService.updateLocation(location);
-
+          
           // Set up location watcher
           locationSubscription.current = await Location.watchPositionAsync(
             {
@@ -185,7 +195,7 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
           );
         } catch (err) {
           console.error("Location error:", err);
-          setError('Failed to get location');
+          setError(`Failed to get location: ${err}`);
         }
       })();
     }
@@ -448,8 +458,8 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
 
   const startSinglePlayerGame = async (username: string, aiCount: number, difficulty: string, duration: number) => {
     try {
-      // Request location permissions if needed
-      await requestLocationPermissions();
+      // Request location permissions and get current location
+      const initialLocation = await requestLocationPermissions();
       
       // Create player
       const userId = `local-${Date.now()}`;
@@ -457,7 +467,6 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
       setCurrentUser(newCurrentUser);
       
       // Create player object with location
-      const initialLocation = myLocation || { latitude: 0, longitude: 0 };
       const userPlayer: Player = {
         id: userId,
         username,
@@ -465,6 +474,9 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
         isIt: true, // Player starts as "it"
         isHost: true
       };
+      
+      // Set my location state
+      setMyLocation(initialLocation);
       
       // Generate AI players around the player
       const aiPlayers = aiPlayerManager.generateAIPlayers(aiCount, initialLocation, difficulty);
@@ -477,19 +489,38 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
       setGameStarted(true);
       setSinglePlayerMode(true);
       setGameTimeRemaining(duration * 60); // Convert minutes to seconds
-      startGameTimer();
+      
+      // Start game timer
+      if (gameTimerRef.current) {
+        clearInterval(gameTimerRef.current);
+      }
+      
+      gameTimerRef.current = setInterval(() => {
+        setGameTimeRemaining(prev => {
+          if (prev === null || prev <= 1) {
+            if (gameTimerRef.current) {
+              clearInterval(gameTimerRef.current);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
       
       // Start AI player update cycle
-      aiPlayerManager.startUpdating(userPlayer, allPlayers, (updatedAIPlayers) => {
-        setPlayers(prevPlayers => {
-          const humanPlayer = prevPlayers.find(p => !p.isAI);
-          return humanPlayer ? [humanPlayer, ...updatedAIPlayers] : updatedAIPlayers;
-        });
-        
-        // Check for tags
-        checkForTag();
-      });
+      aiPlayerManager.startUpdating(
+        userPlayer, 
+        allPlayers, 
+        (updatedAIPlayers) => {
+          setPlayers(prevPlayers => {
+            const humanPlayer = prevPlayers.find(p => !p.isAI);
+            return humanPlayer ? [humanPlayer, ...updatedAIPlayers] : updatedAIPlayers;
+          });
+        },
+        250 // Game radius in meters
+      );
     } catch (error) {
+      console.error("Single player game start error:", error);
       setError(`Failed to start single player game: ${error}`);
     }
   };
@@ -507,9 +538,9 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
 
   const resetGame = () => {
     // Stop any active timers
-    if (gameTimerId) {
-      clearInterval(gameTimerId);
-      setGameTimerId(null);
+    if (gameTimerRef.current) {  // Changed from gameTimerId to gameTimerRef.current
+      clearInterval(gameTimerRef.current);
+      gameTimerRef.current = null;
     }
     
     // Reset game state
@@ -520,7 +551,8 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     setIsHost(false);
     setLastTagMessage(null);
     
-    // Other reset operations as needed
+    // Stop AI updates
+    aiPlayerManager.stopUpdating();
   };
 
   return (
