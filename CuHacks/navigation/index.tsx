@@ -4,9 +4,11 @@ import { createStackNavigator } from '@react-navigation/stack';
 
 import LobbyScreen from '../screens/LobbyScreen';
 import GameScreen from '../screens/GameScreen';
+import TermsScreen from '../screens/TermsScreen';
 import { useLocation } from '../context/LocationContext';
 
 export type RootStackParamList = {
+  Terms: undefined;
   Lobby: undefined;
   Game: undefined;
 };
@@ -18,7 +20,12 @@ export default function Navigation() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Lobby">
+      <Stack.Navigator initialRouteName="Terms">
+        <Stack.Screen 
+          name="Terms" 
+          component={TermsScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen 
           name="Lobby" 
           component={LobbyScreen} 
