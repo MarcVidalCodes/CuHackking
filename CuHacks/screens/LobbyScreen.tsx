@@ -1,11 +1,20 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import MapView from 'react-native-maps';
+import { useNavigation } from '@react-navigation/native';
 import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
 
 export default function LobbyScreen() {
-  const { myLocation, players, currentUser, isHost, error } = useLocation();
+  const { myLocation, players, currentUser, isHost, error, startGame, transferHost, gameStarted } = useLocation();
+  const navigation = useNavigation();
+
+  // Navigate to game screen if game starts
+  useEffect(() => {
+    if (gameStarted) {
+      navigation.navigate('Game' as never);
+    }
+  }, [gameStarted, navigation]);
 
   if (!myLocation) {
     return (
@@ -21,16 +30,39 @@ export default function LobbyScreen() {
     const isCurrentUser = currentUser?.id === item.id;
     
     return (
-      <View style={[
-        styles.playerItem, 
-        isCurrentUser && styles.currentPlayerItem
-      ]}>
+      <TouchableOpacity 
+        style={[styles.playerItem, isCurrentUser && styles.currentPlayerItem]}
+        onLongPress={() => {
+          if (isHost && !isCurrentUser) {
+            Alert.alert(
+              "Transfer Host",
+              `Make ${item.username} the host?`,
+              [
+                { text: "Cancel", style: "cancel" },
+                { 
+                  text: "Confirm", 
+                  onPress: () => transferHost(item.id)
+                }
+              ]
+            );
+          }
+        }}
+      >
         <Text style={styles.playerName}>
           {item.username} {isCurrentUser ? '(You)' : ''}
         </Text>
         {item.isHost && <Text style={styles.hostTag}>Host</Text>}
-      </View>
+      </TouchableOpacity>
     );
+  };
+
+  const handleStartGame = () => {
+    if (players.length < 2) {
+      Alert.alert("Cannot Start Game", "You need at least 2 players to start the game.");
+      return;
+    }
+    
+    startGame();
   };
 
   return (
@@ -40,6 +72,7 @@ export default function LobbyScreen() {
       
       <Text style={styles.playersText}>
         Players ({players.length})
+        {isHost && <Text style={styles.hostNote}> - Long press to transfer host</Text>}
       </Text>
       
       <FlatList
@@ -72,9 +105,16 @@ export default function LobbyScreen() {
       {isHost && (
         <TouchableOpacity 
           style={styles.startButton}
+          onPress={handleStartGame}
         >
           <Text style={styles.startButtonText}>Start Game</Text>
         </TouchableOpacity>
+      )}
+
+      {!isHost && (
+        <Text style={styles.waitingText}>
+          Waiting for host to start the game...
+        </Text>
       )}
     </View>
   );
@@ -99,6 +139,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginVertical: 10,
     fontWeight: 'bold',
+  },
+  hostNote: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: 'normal',
   },
   playersList: {
     maxHeight: 150,
@@ -150,5 +195,12 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  waitingText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 10,
+    fontStyle: 'italic',
   }
 });

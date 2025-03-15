@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
-import { Coordinates, Player } from '../types';
+import { Coordinates, Player, GameState } from '../types';
 import socketService from '../services/socketService';
 
 interface CurrentUser {
@@ -13,10 +13,18 @@ interface LocationContextType {
   myLocation: Coordinates | null;
   players: Player[];
   error: string | null;
+  gameStarted: boolean;
   currentUser: CurrentUser | null;
   isHost: boolean;
+  isTagger: boolean;
+  currentTagger: string | null;
+  tagCooldown: number;
+  lastTagTime: number;
   joinGame: (username: string) => void;
+  startGame: () => void;
   updateLocation: (location: Coordinates) => void;
+  transferHost: (playerId: string) => void;
+  checkForTag: () => void;
 }
 
 const LocationContext = createContext<LocationContextType | null>(null);
@@ -25,9 +33,16 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [myLocation, setMyLocation] = useState<Coordinates | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [gameStarted, setGameStarted] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isHost, setIsHost] = useState(false);
+  const [currentTagger, setCurrentTagger] = useState<string | null>(null);
+  const [tagCooldown, setTagCooldown] = useState(10000); // 10 seconds default
+  const [lastTagTime, setLastTagTime] = useState(0);
   const locationSubscription = useRef<any>(null);
+
+  // Derived state for current user's tagger status
+  const isTagger = currentUser?.id === currentTagger;
 
   // Setup socket event handlers
   useEffect(() => {
@@ -73,12 +88,36 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
       setCurrentUser(prev => prev ? {...prev, isHost: true} : null);
     };
 
+    // Game mechanics events
+    const gameStartedHandler = (gameState: GameState) => {
+      console.log('Game started, initial tagger:', gameState.currentTagger);
+      setGameStarted(true);
+      setCurrentTagger(gameState.currentTagger);
+      setTagCooldown(gameState.tagCooldown);
+      setLastTagTime(gameState.lastTagTime);
+    };
+
+    const playerTaggedHandler = (tagInfo: any) => {
+      console.log(`${tagInfo.taggerName} tagged ${tagInfo.taggedName}`);
+      // Will be used for game events and notifications
+    };
+
+    const gameStateUpdateHandler = (gameState: any) => {
+      console.log('Game state update, new tagger:', gameState.currentTagger);
+      setCurrentTagger(gameState.currentTagger);
+      setTagCooldown(gameState.tagCooldown);
+      setLastTagTime(gameState.lastTagTime);
+    };
+
     // Register event handlers
     socketService.on('connect', connectHandler);
     socketService.on('disconnect', disconnectHandler);
     socketService.on('error', errorHandler);
     socketService.on('updatePlayers', updatePlayersHandler);
     socketService.on('youAreHost', hostHandler);
+    socketService.on('gameStarted', gameStartedHandler);
+    socketService.on('playerTagged', playerTaggedHandler);
+    socketService.on('gameStateUpdate', gameStateUpdateHandler);
 
     // Cleanup handlers on unmount
     return () => {
@@ -87,6 +126,9 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
       socketService.off('error', errorHandler);
       socketService.off('updatePlayers', updatePlayersHandler);
       socketService.off('youAreHost', hostHandler);
+      socketService.off('gameStarted', gameStartedHandler);
+      socketService.off('playerTagged', playerTaggedHandler);
+      socketService.off('gameStateUpdate', gameStateUpdateHandler);
     };
   }, [currentUser?.id]);
 
@@ -149,6 +191,22 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     };
   }, [currentUser?.id]);
 
+  // Check if current user is tagger more frequently when game is started
+  useEffect(() => {
+    if (gameStarted && isTagger) {
+      const tagCheckInterval = setInterval(() => {
+        // Only check for tags when cooldown is inactive
+        if (Date.now() - lastTagTime > tagCooldown) {
+          console.log("Checking for nearby players to tag...");
+          socketService.emit('checkForTag', {});
+        }
+      }, 2000); // Check every 2 seconds
+      
+      return () => clearInterval(tagCheckInterval);
+    }
+  }, [gameStarted, isTagger, lastTagTime, tagCooldown]);
+
+  // Join game function
   const joinGame = (username: string) => {
     const socketId = socketService.getSocketId();
     if (!socketId) {
@@ -166,8 +224,37 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     socketService.joinGame(username);
   };
 
+  // Start game function (host only)
+  const startGame = () => {
+    if (!isHost) {
+      console.log("Only the host can start the game");
+      return;
+    }
+    
+    socketService.startGame();
+  };
+
+  // Update location function
   const updateLocation = (location: Coordinates) => {
     socketService.updateLocation(location);
+  };
+
+  // Transfer host function (host only)
+  const transferHost = (playerId: string) => {
+    if (!isHost) {
+      console.log("Only the host can transfer host status");
+      return;
+    }
+    
+    socketService.transferHost(playerId);
+  };
+
+  // Manual tag check function
+  const checkForTag = () => {
+    if (isTagger) {
+      console.log("Attempting to tag nearby player...");
+      socketService.emit('checkForTag', {});
+    }
   };
 
   return (
@@ -176,10 +263,18 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
         myLocation, 
         players, 
         error,
+        gameStarted,
         currentUser,
         isHost,
+        isTagger,
+        currentTagger,
+        tagCooldown,
+        lastTagTime,
         joinGame, 
-        updateLocation
+        startGame,
+        updateLocation,
+        transferHost,
+        checkForTag
       }}
     >
       {children}
