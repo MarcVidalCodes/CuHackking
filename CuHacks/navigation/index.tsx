@@ -39,6 +39,11 @@ export default function Navigation() {
           name="Game" 
           component={GameScreen} 
         />
+        {/* Add the SinglePlayerSetup screen */}
+        <Stack.Screen 
+          name="SinglePlayerSetup" 
+          component={SinglePlayerSetupScreen} 
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

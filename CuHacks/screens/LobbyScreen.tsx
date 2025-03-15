@@ -55,8 +55,8 @@ export default function LobbyScreen() {
 
   const handleSinglePlayer = () => {
     if (username.trim()) {
-      joinGame(username, true); // true for singleplayer mode
-      setHasJoined(true);
+      // Navigate to single player setup screen instead of directly joining the game
+      navigation.navigate('SinglePlayerSetup', { username });
     }
   };
 
