@@ -42,6 +42,9 @@ interface CurrentUser {
 interface GameSettings {
   duration: number; // in minutes
   initialCircleSize?: number; // Add initialCircleSize to the interface
+  circleShrinkPercent?: number; // Percentage the circle shrinks by (e.g., 80 for 80%)
+  shrinkDuration?: number; // How many seconds it takes for the circle to shrink
+  shrinkInterval?: number; // How many seconds between circle shrinks
 }
 
 interface LocationContextType {
@@ -77,7 +80,10 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [lastTagMessage, setLastTagMessage] = useState<string | null>(null);
   const [gameSettings, setGameSettings] = useState<GameSettings>({ 
     duration: 5,
-    initialCircleSize: 100 // Set default value
+    initialCircleSize: 100, // Set default value
+    circleShrinkPercent: 30, // Changed default from 80 to 30
+    shrinkDuration: 30, // Changed from 5 to 30 seconds
+    shrinkInterval: 10 // Default to 10 seconds between shrinks
   });
   const [gameTimeRemaining, setGameTimeRemaining] = useState<number | null>(null);
   const [singlePlayerMode, setSinglePlayerMode] = useState(false);

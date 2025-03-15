@@ -200,9 +200,11 @@ export default function GameScreen() {
   const shrinkCircle = useCallback(() => {
     if (!circleCenter || isShrinking) return;
     
-    // Calculate new radius (80% of current, but not smaller than 50m)
+    // Calculate new radius based on shrink percentage (default to 80% if not set)
+    const shrinkPercent = gameSettings?.circleShrinkPercent || 30;
     const startRadius = circleRadius;
-    const endRadius = Math.max(50, startRadius * 0.8);
+    // Changed formula: New radius should be (100% - shrinkPercent%) of original
+    const endRadius = Math.max(50, startRadius * (1 - shrinkPercent / 100));
     
     // Use the pre-calculated future circle if available
     const newCenter = futureCircle ? futureCircle.center : calculateNewCenter(circleCenter, startRadius, endRadius);
@@ -213,9 +215,9 @@ export default function GameScreen() {
     // Start shrinking animation
     setIsShrinking(true);
     
-    // Set up animation for smooth shrinking over 5 seconds
+    // Set up animation for smooth shrinking over the configured duration
     const startTime = Date.now();
-    const duration = 5000;
+    const duration = (gameSettings?.shrinkDuration || 30) * 1000;
     const radiusDiff = startRadius - endRadius;
     
     if (shrinkAnimationRef.current) {
@@ -253,9 +255,9 @@ export default function GameScreen() {
         setTimerSeconds(10);
       }
     }, 50);
-  }, [circleCenter, circleRadius, isShrinking, calculateNewCenter, futureCircle]);
+  }, [circleCenter, circleRadius, isShrinking, calculateNewCenter, futureCircle, gameSettings]);
 
-  // Set up the 10-second timer
+  // Set up the timer for circle shrinking
   useEffect(() => {
     if (!gameStarted) return;
     
@@ -264,12 +266,19 @@ export default function GameScreen() {
       clearInterval(timerIntervalRef.current);
     }
     
-    // Create a new timer that counts down from 10 to 0
+    // Use the configured shrink interval or fall back to 10 seconds
+    const intervalSeconds = gameSettings?.shrinkInterval || 10;
+    
+    // Start with the full interval time
+    setTimerSeconds(intervalSeconds);
+    
+    // Create a new timer that counts down from the configured interval to 0
     timerIntervalRef.current = setInterval(() => {
       setTimerSeconds(prev => {
         // When timer hits 5, calculate and show the future circle
         if (prev === 5 && !futureCircle && circleCenter) {
-          const newRadius = Math.max(50, circleRadius * 0.8);
+          const shrinkPercent = gameSettings?.circleShrinkPercent || 30;
+          const newRadius = Math.max(50, circleRadius * (1 - shrinkPercent / 100));
           const newCenter = calculateNewCenter(circleCenter, circleRadius, newRadius);
           setFutureCircle({
             center: newCenter,
@@ -280,7 +289,8 @@ export default function GameScreen() {
         if (prev <= 1) {
           // When timer reaches 0, start shrinking process
           shrinkCircle();
-          return 0;
+          // Reset timer to the full interval for the next cycle
+          return intervalSeconds;
         }
         return prev - 1;
       });
@@ -292,7 +302,7 @@ export default function GameScreen() {
         timerIntervalRef.current = null;
       }
     };
-  }, [gameStarted, shrinkCircle, circleCenter, circleRadius, futureCircle, calculateNewCenter]);
+  }, [gameStarted, shrinkCircle, circleCenter, circleRadius, futureCircle, calculateNewCenter, gameSettings]);
 
   // Clean up animation when component unmounts
   useEffect(() => {

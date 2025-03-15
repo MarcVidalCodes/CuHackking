@@ -13,7 +13,10 @@ export default function WaitingScreen() {
   const navigation = useNavigation<WaitingScreenNavigationProp>();
   const [showSettings, setShowSettings] = useState(false);
   const [gameDuration, setGameDuration] = useState(5);
-  const [initialCircleSize, setInitialCircleSize] = useState(100); // Add initial circle size state
+  const [initialCircleSize, setInitialCircleSize] = useState(100);
+  const [circleShrinkPercent, setCircleShrinkPercent] = useState(30); // Changed default from 80 to 30
+  const [shrinkDuration, setShrinkDuration] = useState(30);
+  const [shrinkInterval, setShrinkInterval] = useState(10); // Add new state for shrink interval
   const { players, isHost, startGame, updateGameSettings, gameStarted } = useLocation();
 
   useEffect(() => {
@@ -33,7 +36,10 @@ export default function WaitingScreen() {
   const handleStartGame = async () => {
     updateGameSettings({ 
       duration: gameDuration,
-      initialCircleSize: initialCircleSize // Include circle size in settings
+      initialCircleSize: initialCircleSize,
+      circleShrinkPercent: circleShrinkPercent, // Include new settings
+      shrinkDuration: shrinkDuration,
+      shrinkInterval: shrinkInterval // Include new setting
     });
     await startGame();
     navigation.replace('Loading'); // Navigate to loading instead of game
@@ -120,6 +126,60 @@ export default function WaitingScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* New setting for circle shrink percentage - updated label for clarity */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>Circle Shrinks By (% of current size)</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setCircleShrinkPercent(Math.max(10, circleShrinkPercent - 5))}
+              >
+                <MaterialIcons name="remove" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.durationText}>{circleShrinkPercent}%</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setCircleShrinkPercent(Math.min(50, circleShrinkPercent + 5))}
+              >
+                <MaterialIcons name="add" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* New setting for shrink duration */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>Shrink Duration (seconds)</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setShrinkDuration(Math.max(1, shrinkDuration - 1))}
+              >
+                <MaterialIcons name="remove" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.durationText}>{shrinkDuration}</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setShrinkDuration(shrinkDuration + 1)}
+              >
+                <MaterialIcons name="add" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+
+            {/* New setting for shrink interval */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>Circle Shrinks Every (seconds)</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setShrinkInterval(Math.max(5, shrinkInterval - 1))}
+              >
+                <MaterialIcons name="remove" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.durationText}>{shrinkInterval}</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setShrinkInterval(shrinkInterval + 1)}
+              >
+                <MaterialIcons name="add" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            
             <TouchableOpacity 
               style={styles.saveButton}
               onPress={() => setShowSettings(false)}
