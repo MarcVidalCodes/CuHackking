@@ -451,12 +451,26 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   map: {
-    width: Dimensions.get('window').width,
-    height: Dimensions.get('window').height,
+    flex: 1,
+  },
+  playersBox: {
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 10,
+    minWidth: 150,
+  },
+  safeZoneBox: {
+    position: 'absolute',
+    top: 150, // Position below players box
+    right: 50,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 10,
+    minWidth: 150,
   },
   errorText: {
     fontSize: 18,
@@ -470,7 +484,7 @@ const styles = StyleSheet.create({
   },
   gameInfo: {
     position: 'absolute',
-    top: 50,
+    top: 10,
     left: 0,
     right: 0,
     backgroundColor: 'rgba(255,255,255,0.8)',
@@ -536,8 +550,9 @@ const styles = StyleSheet.create({
   },
   circleInfo: {
     position: 'absolute',
-    bottom: 150,
-    left: 20,
+    bottom: 90,
+    left: 10,
+    top: 700,
     backgroundColor: 'rgba(0,0,0,0.7)',
     padding: 10,
     borderRadius: 8,
