@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity, Platform, Animated } from 'react-native';
+import MapView, { Marker, Region, Circle, Polyline } from 'react-native-maps';
 import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
 import GameStatusBar from '../components/GameStatusBar';
@@ -27,6 +27,23 @@ export default function GameScreen() {
     latitudeDelta: 0.01,
     longitudeDelta: 0.01,
   });
+
+  // Circle state variables
+  const [circleCenter, setCircleCenter] = useState<Coordinates | null>(null);
+  const [circleRadius, setCircleRadius] = useState(100); // Start with 100m
+  const [isShrinking, setIsShrinking] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(10);
+  const [futureCircle, setFutureCircle] = useState<{center: Coordinates, radius: number} | null>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const shrinkAnimationRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Effect to set initial circle center based on player locations when game starts
+  useEffect(() => {
+    if (gameStarted && players.length > 0 && myLocation) {
+      // For now, just use your location as the circle center
+      setCircleCenter(myLocation);
+    }
+  }, [gameStarted, myLocation]);
 
   // Update map region when your location changes
   useEffect(() => {
@@ -118,6 +135,185 @@ export default function GameScreen() {
   // Format time for display
   const formattedTime = gameTimeRemaining !== null ? formatTime(gameTimeRemaining) : '--:--';
 
+  // Calculate a new position to ensure new circle stays fully within the old one
+  const calculateNewCenter = useCallback((center: Coordinates, currentRadius: number, newRadius: number) => {
+    // Maximum distance the center can move while keeping the new circle inside the old one
+    const maxMoveDistance = currentRadius - newRadius;
+    
+    // Choose a smaller value to ensure containment (70% of max)
+    const safeDistance = maxMoveDistance * 0.7;
+    
+    // Random distance within the safe range
+    const randomDistance = Math.random() * safeDistance;
+    const randomAngle = Math.random() * 2 * Math.PI;
+    
+    // Convert to x,y offset
+    const xOffset = randomDistance * Math.cos(randomAngle);
+    const yOffset = randomDistance * Math.sin(randomAngle);
+    
+    // Convert to lat/lng (approximately)
+    const latOffset = yOffset * 0.00001;
+    const lngOffset = xOffset * 0.00001;
+    
+    return {
+      latitude: center.latitude + latOffset,
+      longitude: center.longitude + lngOffset
+    };
+  }, []);
+
+  // Calculate the nearest point on a circle from a given point
+  const calculateNearestCirclePoint = useCallback((circleCenter: Coordinates, radius: number, point: Coordinates) => {
+    // Calculate direction vector from circle center to point
+    const dx = point.longitude - circleCenter.longitude;
+    const dy = point.latitude - circleCenter.latitude;
+    
+    // Calculate distance (Euclidean for simplicity, not perfect for geo)
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // If point is inside circle, we'll just use the point itself
+    if (distance * 111000 < radius) { // Convert approx to meters
+      return point;
+    }
+    
+    // Normalize the direction vector
+    const normX = dx / distance;
+    const normY = dy / distance;
+    
+    // Calculate the point on the circle (radius converted to approx degrees)
+    const radiusInDegrees = radius / 111000; // Approximate conversion
+    
+    return {
+      longitude: circleCenter.longitude + normX * radiusInDegrees,
+      latitude: circleCenter.latitude + normY * radiusInDegrees
+    };
+  }, []);
+
+  // Function to shrink the circle
+  const shrinkCircle = useCallback(() => {
+    if (!circleCenter || isShrinking) return;
+    
+    // Calculate new radius (80% of current, but not smaller than 20m)
+    const startRadius = circleRadius;
+    const endRadius = Math.max(20, startRadius * 0.8);
+    
+    // Use the pre-calculated future circle if available
+    const newCenter = futureCircle ? futureCircle.center : calculateNewCenter(circleCenter, startRadius, endRadius);
+    
+    // Clear the future circle preview
+    setFutureCircle(null);
+    
+    // Start shrinking animation
+    setIsShrinking(true);
+    
+    // Set up animation for smooth shrinking over 5 seconds
+    const startTime = Date.now();
+    const duration = 5000;
+    const radiusDiff = startRadius - endRadius;
+    
+    if (shrinkAnimationRef.current) {
+      clearInterval(shrinkAnimationRef.current);
+    }
+    
+    shrinkAnimationRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Update radius based on progress
+      const currentRadius = startRadius - (radiusDiff * progress);
+      setCircleRadius(currentRadius);
+      
+      // Also update center during animation
+      if (newCenter && circleCenter) {
+        const latDiff = newCenter.latitude - circleCenter.latitude;
+        const lngDiff = newCenter.longitude - circleCenter.longitude;
+        setCircleCenter({
+          latitude: circleCenter.latitude + (latDiff * progress),
+          longitude: circleCenter.longitude + (lngDiff * progress)
+        });
+      }
+      
+      // End animation when complete
+      if (progress >= 1) {
+        if (shrinkAnimationRef.current) {
+          clearInterval(shrinkAnimationRef.current);
+          shrinkAnimationRef.current = null;
+        }
+        setCircleRadius(endRadius);
+        setCircleCenter(newCenter);
+        setIsShrinking(false);
+        // Reset the timer when shrinking is complete
+        setTimerSeconds(10);
+      }
+    }, 50);
+  }, [circleCenter, circleRadius, isShrinking, calculateNewCenter, futureCircle]);
+
+  // Set up the 10-second timer
+  useEffect(() => {
+    if (!gameStarted) return;
+    
+    // Clear any existing timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+    
+    // Create a new timer that counts down from 10 to 0
+    timerIntervalRef.current = setInterval(() => {
+      setTimerSeconds(prev => {
+        // When timer hits 5, calculate and show the future circle
+        if (prev === 5 && !futureCircle && circleCenter) {
+          const newRadius = Math.max(20, circleRadius * 0.8);
+          const newCenter = calculateNewCenter(circleCenter, circleRadius, newRadius);
+          setFutureCircle({
+            center: newCenter,
+            radius: newRadius
+          });
+        }
+        
+        if (prev <= 1) {
+          // When timer reaches 0, start shrinking process
+          shrinkCircle();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+  }, [gameStarted, shrinkCircle, circleCenter, circleRadius, futureCircle, calculateNewCenter]);
+
+  // Clean up animation when component unmounts
+  useEffect(() => {
+    return () => {
+      if (shrinkAnimationRef.current) {
+        clearInterval(shrinkAnimationRef.current);
+        shrinkAnimationRef.current = null;
+      }
+    };
+  }, []);
+
+  // Calculate the path to the future circle (if it exists)
+  const getPathToFutureCircle = useCallback(() => {
+    if (!myLocation || !futureCircle) return null;
+    
+    // Calculate nearest point on future circle
+    const nearestPoint = calculateNearestCirclePoint(
+      futureCircle.center, 
+      futureCircle.radius, 
+      myLocation
+    );
+    
+    // Return the path coordinates
+    return [
+      { latitude: myLocation.latitude, longitude: myLocation.longitude },
+      { latitude: nearestPoint.latitude, longitude: nearestPoint.longitude }
+    ];
+  }, [myLocation, futureCircle, calculateNearestCirclePoint]);
+
   if (error) {
     return (
       <View style={styles.container}>
@@ -149,15 +345,53 @@ export default function GameScreen() {
         }}
         onError={(error) => {
           console.error("Map error:", error);
-          // Try to remount the map if there's an error
           setMapKey(k => k + 1);
         }}
         onRegionChangeComplete={() => {
-          // User has moved the map
           setUserMovedMap(true);
         }}
       >
         {renderPlayerMarkers()}
+        
+        {/* Current circle */}
+        {circleCenter && (
+          <Circle
+            center={{
+              latitude: circleCenter.latitude,
+              longitude: circleCenter.longitude,
+            }}
+            radius={circleRadius}
+            strokeWidth={3}
+            strokeColor="rgba(255, 0, 0, 0.8)"
+            fillColor="rgba(255, 0, 0, 0.1)"
+          />
+        )}
+        
+        {/* Future circle (shown 5 seconds before shrinking) */}
+        {futureCircle && (
+          <Circle
+            center={{
+              latitude: futureCircle.center.latitude,
+              longitude: futureCircle.center.longitude,
+            }}
+            radius={futureCircle.radius}
+            strokeWidth={2}
+            strokeColor="rgba(255, 255, 0, 0.8)"
+            fillColor="rgba(255, 255, 0, 0.05)"
+            // Dashed line effect (not supported in all versions)
+            // Use lineDashPattern if available in your version
+          />
+        )}
+        
+        {/* Dotted line path to future circle */}
+        {futureCircle && myLocation && (
+          <Polyline
+            coordinates={getPathToFutureCircle() || []}
+            strokeColor="rgba(255, 255, 0, 0.8)"
+            strokeWidth={2}
+            lineDashPattern={[5, 5]} // Dotted line pattern
+          />
+        )}
       </MapView>
 
       <GameStatusBar 
@@ -193,6 +427,23 @@ export default function GameScreen() {
       <TouchableOpacity style={styles.recenterButton} onPress={recenterMap}>
         <Text style={styles.recenterButtonText}>📍</Text>
       </TouchableOpacity>
+
+      {/* Safe zone info and timer */}
+      {gameStarted && circleCenter && (
+        <View style={styles.circleInfo}>
+          <Text style={styles.circleInfoText}>
+            Safe zone: {Math.round(circleRadius)}m
+          </Text>
+          {!isShrinking ? (
+            <Text style={styles.timerText}>
+              Circle shrinks in: {timerSeconds}s
+              {futureCircle && " (New zone visible)"}
+            </Text>
+          ) : (
+            <Text style={styles.shrinkingText}>Circle shrinking...</Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -283,4 +534,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  circleInfo: {
+    position: 'absolute',
+    bottom: 150,
+    left: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 8,
+  },
+  circleInfoText: {
+    color: 'white',
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  timerText: {
+    color: '#FFC107',  // Amber color for the timer
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  shrinkingText: {
+    color: '#FF5252',  // Red color for the shrinking warning
+    fontSize: 14,
+    fontWeight: 'bold',
+  }
 });
