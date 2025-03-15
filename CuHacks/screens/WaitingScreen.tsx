@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocation } from '../context/LocationContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation';
+import socketService from '../services/socketService';
 
 type WaitingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Waiting'>;
 
@@ -17,7 +18,16 @@ export default function WaitingScreen() {
   const [circleShrinkPercent, setCircleShrinkPercent] = useState(30); // Changed default from 80 to 30
   const [shrinkDuration, setShrinkDuration] = useState(30);
   const [shrinkInterval, setShrinkInterval] = useState(10); // Add new state for shrink interval
-  const { players, isHost, startGame, updateGameSettings, gameStarted } = useLocation();
+  const [showTransferModal, setShowTransferModal] = useState(false); // Add new state for transfer modal
+  const { 
+    players, 
+    isHost, 
+    startGame, 
+    updateGameSettings, 
+    gameStarted, 
+    currentUser, // Add currentUser from context
+    setPlayers // Add setPlayers from context
+  } = useLocation();
 
   useEffect(() => {
     if (gameStarted) {
@@ -43,6 +53,28 @@ export default function WaitingScreen() {
     });
     await startGame();
     navigation.replace('Loading'); // Navigate to loading instead of game
+  };
+
+  const handleTransferHost = (newHostId: string) => {
+    if (isHost) {
+      // Emit transfer event
+      socketService.emit('transferHost', { 
+        newHostId,
+        currentHostId: currentUser?.id 
+      });
+
+      // Update local state
+      setPlayers(prevPlayers => 
+        prevPlayers.map(player => ({
+          ...player,
+          isHost: player.id === newHostId
+        }))
+      );
+
+      // Close modal and show confirmation
+      setShowTransferModal(false);
+      Alert.alert('Host Transferred', 'Host abilities have been transferred successfully');
+    }
   };
 
   return (
@@ -78,6 +110,14 @@ export default function WaitingScreen() {
           >
             <MaterialIcons name="play-arrow" size={24} color="white" />
             <Text style={styles.buttonText}>Start Game</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.transferButton}
+            onPress={() => setShowTransferModal(true)}
+          >
+            <MaterialIcons name="switch-account" size={24} color="white" />
+            <Text style={styles.buttonText}>Transfer Host</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -189,6 +229,37 @@ export default function WaitingScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showTransferModal}
+        transparent={true}
+        animationType="slide"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select New Host</Text>
+            <FlatList
+              data={players.filter(p => p.id !== currentUser?.id)}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.playerTransferItem}
+                  onPress={() => handleTransferHost(item.id)}
+                >
+                  <MaterialIcons name="person" size={24} color="white" />
+                  <Text style={styles.playerTransferName}>{item.username}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity 
+              style={styles.cancelButton}
+              onPress={() => setShowTransferModal(false)}
+            >
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -258,6 +329,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
   },
+  transferButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 10,
+  },
   buttonText: {
     color: 'white',
     fontSize: 18,
@@ -307,4 +386,30 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playerTransferItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  playerTransferName: {
+    color: 'white',
+    fontSize: 18,
+    marginLeft: 10,
+  },
+  cancelButton: {
+    backgroundColor: '#FF0000',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 10,
+  }
 });
