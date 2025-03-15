@@ -12,6 +12,7 @@ interface CurrentUser {
 
 interface GameSettings {
   duration: number; // in minutes
+  initialCircleSize?: number; // Add initialCircleSize to the interface
 }
 
 interface LocationContextType {
@@ -32,6 +33,7 @@ interface LocationContextType {
   singlePlayerMode: boolean;
   startSinglePlayerGame: (username: string, aiCount: number, difficulty: string, duration: number) => void;
   resetGame: () => void;
+  gameSettings: GameSettings; // Add gameSettings to the context type
 }
 
 const LocationContext = createContext<LocationContextType | null>(null);
@@ -44,7 +46,10 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [lastTagMessage, setLastTagMessage] = useState<string | null>(null);
-  const [gameSettings, setGameSettings] = useState<GameSettings>({ duration: 5 });
+  const [gameSettings, setGameSettings] = useState<GameSettings>({ 
+    duration: 5,
+    initialCircleSize: 100 // Set default value
+  });
   const [gameTimeRemaining, setGameTimeRemaining] = useState<number | null>(null);
   const [singlePlayerMode, setSinglePlayerMode] = useState(false);
   const [aiUpdateInterval, setAiUpdateInterval] = useState<NodeJS.Timeout | null>(null);
@@ -542,7 +547,8 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
         updateGameSettings,
         singlePlayerMode,
         startSinglePlayerGame,
-        resetGame
+        resetGame,
+        gameSettings // Expose gameSettings in the context
       }}
     >
       {children}

@@ -14,7 +14,7 @@ type GameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Game'>;
 import LeaveButton from '../components/LeaveButton';
 
 export default function GameScreen() {
-  const { myLocation, players, currentUser, error, lastTagMessage, checkForTag, gameTimeRemaining, gameStarted } = useLocation();
+  const { myLocation, players, currentUser, error, lastTagMessage, checkForTag, gameTimeRemaining, gameStarted, gameSettings } = useLocation();
   const navigation = useNavigation<GameScreenNavigationProp>();
   const mapRef = useRef<MapView | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -30,13 +30,21 @@ export default function GameScreen() {
 
   // Circle state variables
   const [circleCenter, setCircleCenter] = useState<Coordinates | null>(null);
-  const [circleRadius, setCircleRadius] = useState(100); // Start with 100m
+  const [circleRadius, setCircleRadius] = useState(gameSettings?.initialCircleSize || 100); // Use the initialCircleSize from settings
   const [isShrinking, setIsShrinking] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(10);
   const [futureCircle, setFutureCircle] = useState<{center: Coordinates, radius: number} | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shrinkAnimationRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Add useEffect to update circle radius when gameSettings changes
+  useEffect(() => {
+    if (gameSettings?.initialCircleSize) {
+      console.log("Updating circle radius to:", gameSettings.initialCircleSize);
+      setCircleRadius(gameSettings.initialCircleSize);
+    }
+  }, [gameSettings]);
+
   // Effect to set initial circle center based on player locations when game starts
   useEffect(() => {
     if (gameStarted && players.length > 0 && myLocation) {

@@ -13,6 +13,7 @@ export default function WaitingScreen() {
   const navigation = useNavigation<WaitingScreenNavigationProp>();
   const [showSettings, setShowSettings] = useState(false);
   const [gameDuration, setGameDuration] = useState(5);
+  const [initialCircleSize, setInitialCircleSize] = useState(100); // Add initial circle size state
   const { players, isHost, startGame, updateGameSettings, gameStarted } = useLocation();
 
   useEffect(() => {
@@ -30,7 +31,10 @@ export default function WaitingScreen() {
   );
 
   const handleStartGame = async () => {
-    updateGameSettings({ duration: gameDuration });
+    updateGameSettings({ 
+      duration: gameDuration,
+      initialCircleSize: initialCircleSize // Include circle size in settings
+    });
     await startGame();
     navigation.replace('Loading'); // Navigate to loading instead of game
   };
@@ -93,6 +97,24 @@ export default function WaitingScreen() {
               <TouchableOpacity 
                 style={styles.durationButton}
                 onPress={() => setGameDuration(gameDuration + 1)}
+              >
+                <MaterialIcons name="add" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Add new setting for initial circle size */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingLabel}>Initial Safe Zone Size (meters)</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setInitialCircleSize(Math.max(50, initialCircleSize - 10))}
+              >
+                <MaterialIcons name="remove" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.durationText}>{initialCircleSize}</Text>
+              <TouchableOpacity 
+                style={styles.durationButton}
+                onPress={() => setInitialCircleSize(initialCircleSize + 10)}
               >
                 <MaterialIcons name="add" size={24} color="white" />
               </TouchableOpacity>
