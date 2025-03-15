@@ -426,15 +426,6 @@ export default function GameScreen() {
       
       <LeaveButton />
       
-      {/* Add tag button if current player is "it" */}
-      {isCurrentPlayerIt && (
-        <TouchableOpacity 
-          style={styles.tagButton}
-          onPress={() => checkForTag()}
-        >
-          <Text style={styles.tagButtonText}>👋 TAG!</Text>
-        </TouchableOpacity>
-      )}
       
       {lastTagMessage && (
         <View style={styles.tagMessage}>
