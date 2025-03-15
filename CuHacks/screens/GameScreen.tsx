@@ -5,6 +5,7 @@ import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
 import GameStatusBar from '../components/GameStatusBar';
 import PlayersList from '../components/PlayersList';
+import LeaveButton from '../components/LeaveButton';
 
 export default function GameScreen() {
   const { myLocation, players, currentUser, error, lastTagMessage, checkForTag } = useLocation();
@@ -184,6 +185,8 @@ export default function GameScreen() {
         players={players} 
         currentUserId={currentUser?.id}
       />
+      
+      <LeaveButton />
       
       {/* Add tag button if current player is "it" */}
       {isCurrentPlayerIt && (
