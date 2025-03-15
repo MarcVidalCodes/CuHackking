@@ -1,29 +1,17 @@
-export interface Coordinates {
+export type Coordinates = {
     latitude: number;
     longitude: number;
-  }
+  };
   
-  export interface Player {
+  export type Player = {
     id: string;
     username: string;
-    location?: Coordinates;
-    isHost: boolean;
-    isTagger?: boolean;
-    score?: number;
-  }
+    location: Coordinates;
+    isIt: boolean;
+    isHost: boolean; 
+  };
   
-  export interface GameState {
-    gameStarted: boolean;
-    currentTagger: string | null;
-    tagCooldown: number;
+  export type GameState = {
+    gameInProgress: boolean;
     players: Player[];
-  }
-  
-  export interface TagEvent {
-    taggerId: string;
-    taggerName: string;
-    taggedId: string;
-    taggedName: string;
-    distance?: number;
-    timestamp: number;
-  }
+  };

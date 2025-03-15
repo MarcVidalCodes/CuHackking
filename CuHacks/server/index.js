@@ -2,7 +2,10 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const geolib = require('geolib');
+const dotenv = require('dotenv');
+
+// Load environment variables
+dotenv.config();
 
 // Initialize express app
 const app = express();
@@ -11,66 +14,58 @@ app.use(cors());
 // Create HTTP server
 const server = http.createServer(app);
 
-// Initialize Socket.IO
+// Initialize Socket.IO with more permissive CORS
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+    allowedHeaders: ["*"],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'] // Try both transport methods
 });
 
 // Game state
 let gameState = {
-  players: [],
-  gameStarted: false,
-  currentTagger: null,
-  tagCooldown: 0,
-  lastTagTime: 0,
-  tagRadius: 30, // Meters
-  tagCooldownTime: 10000 // 10 seconds between tags
+  gameInProgress: false,
+  players: []
 };
 
-// Helper functions
-function getRandomPlayer(players) {
-  if (players.length === 0) return null;
-  return players[Math.floor(Math.random() * players.length)];
-}
+// Change these variables near the top of your server file
+let lastTagTime = 0;
+const TAG_COOLDOWN = 30000; // 30 seconds cooldown
+const TAG_DISTANCE = 0.0005; // Increase to ~50 meters (was likely too small before)
 
-function calculateDistance(point1, point2) {
-  return geolib.getDistance(
-    { latitude: point1.latitude, longitude: point1.longitude },
-    { latitude: point2.latitude, longitude: point2.longitude }
-  );
-}
+// Make sure the calculateDistance function is implemented:
+function calculateDistance(loc1, loc2) {
+  if (!loc1 || !loc2) return Infinity;
+  
+  // Better distance calculation using Haversine formula for more accuracy
+  // This calculates the "as the crow flies" distance between two points
+  const R = 6371000; // Earth radius in meters
+  const lat1 = loc1.latitude * Math.PI / 180;
+  const lat2 = loc2.latitude * Math.PI / 180;
+  const latDiff = (loc2.latitude - loc1.latitude) * Math.PI / 180;
+  const lngDiff = (loc2.longitude - loc1.longitude) * Math.PI / 180;
 
-function setNewTagger(playerId) {
-  gameState.currentTagger = playerId;
+  const a = Math.sin(latDiff/2) * Math.sin(latDiff/2) +
+          Math.cos(lat1) * Math.cos(lat2) *
+          Math.sin(lngDiff/2) * Math.sin(lngDiff/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   
-  // Find the player and update their tagger status
-  gameState.players.forEach(player => {
-    player.isTagger = player.id === playerId;
-  });
-  
-  console.log(`New tagger set: ${playerId}`);
-  
-  // Reset tag cooldown
-  gameState.tagCooldown = Date.now() + gameState.tagCooldownTime;
-  gameState.lastTagTime = Date.now();
-  
-  // Broadcast updated game state
-  io.emit('gameStateUpdate', {
-    currentTagger: gameState.currentTagger,
-    tagCooldown: gameState.tagCooldown
-  });
+  return R * c / 111000; // Convert meters to approximate coordinate distance
 }
 
 // Socket.IO connection handler
 io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
-  
+  let isNewConnection = true;
+
   // Handle player joining the game
   socket.on('joinGame', ({ username }) => {
-    console.log(`Player ${username} joined with ID: ${socket.id}`);
+    if (isNewConnection) {
+      console.log(`Player ${username} connected: ${socket.id}`);
+      isNewConnection = false;
+    }
     
     // Check if player already exists
     const existingPlayerIndex = gameState.players.findIndex(p => p.id === socket.id);
@@ -90,9 +85,8 @@ io.on('connection', (socket) => {
           latitude: 0,
           longitude: 0
         },
-        isHost: isFirstPlayer, // First player is "host"
-        isTagger: false, 
-        score: 0
+        isIt: isFirstPlayer, // First player is "it"
+        isHost: isFirstPlayer // First player is "host"
       };
       
       gameState.players.push(newPlayer);
@@ -104,7 +98,7 @@ io.on('connection', (socket) => {
       }
     }
     
-    console.log(`Current players: ${gameState.players.length}`);
+    console.log(`Current players: ${JSON.stringify(gameState.players)}`);
     // Broadcast updated player list to all clients
     io.emit('updatePlayers', gameState.players);
   });
@@ -114,222 +108,229 @@ io.on('connection', (socket) => {
     const playerIndex = gameState.players.findIndex(player => player.id === socket.id);
     
     if (playerIndex !== -1) {
+      // Only emit updates if location has changed significantly
+      const oldLoc = gameState.players[playerIndex].location;
+      const newLoc = location;
+      
+      // Check if location has changed more than a threshold (now using a larger threshold)
+      const threshold = 0.0001; // ~10 meters, doubled from before
+      const hasChangedSignificantly = 
+        !oldLoc || 
+        Math.abs(oldLoc.latitude - newLoc.latitude) > threshold || 
+        Math.abs(oldLoc.longitude - newLoc.longitude) > threshold;
+      
+      // Always update the player's stored location
       gameState.players[playerIndex].location = location;
-      io.emit('updatePlayers', gameState.players);
-    }
-    
-    // Check for tagging if game is started and this player is the tagger
-    if (gameState.gameStarted && 
-        gameState.currentTagger === socket.id && 
-        Date.now() > gameState.tagCooldown) {
       
-      // Find closest player to tag
-      const tagger = gameState.players[playerIndex];
-      let closestPlayer = null;
-      let closestDistance = Infinity;
-      
-      gameState.players.forEach(player => {
-        if (player.id !== socket.id && player.location) {
-          const distance = calculateDistance(tagger.location, player.location);
-          
-          if (distance < closestDistance) {
-            closestDistance = distance;
-            closestPlayer = player;
-          }
-        }
-      });
-      
-      // Check if close enough to tag
-      if (closestPlayer && closestDistance <= gameState.tagRadius) {
-        console.log(`${tagger.username} tagged ${closestPlayer.username} (${closestDistance}m)`);
-        
-        // Update scores
-        tagger.score += 1;
-        
-        // Broadcast tag event
-        io.emit('playerTagged', {
-          taggerId: tagger.id,
-          taggerName: tagger.username,
-          taggedId: closestPlayer.id,
-          taggedName: closestPlayer.username,
-          timestamp: Date.now()
-        });
-        
-        // Set the tagged player as the new tagger
-        setNewTagger(closestPlayer.id);
+      // Only broadcast significant location changes and throttle
+      if (hasChangedSignificantly) {
+        throttledEmitUpdate(); // Use our throttled update function
       }
     }
   });
 
-  // Start the game
+  // Handle game start
   socket.on('startGame', () => {
-    // Check if this socket is the host
     const player = gameState.players.find(p => p.id === socket.id);
     if (!player || !player.isHost) {
-      console.log('Non-host tried to start game');
-      return;
+      console.log(`Player ${socket.id} attempted to start game but is not host`);
+      return; // Only host can start game
     }
     
-    if (gameState.players.length < 2) {
-      console.log('Not enough players to start game');
-      socket.emit('error', { message: 'Need at least 2 players to start' });
-      return;
+    console.log('Game started by host');
+    gameState.gameInProgress = true;
+    
+    // Make sure at least one player is "it"
+    if (gameState.players.length > 0) {
+      const itIndex = Math.floor(Math.random() * gameState.players.length);
+      gameState.players = gameState.players.map((player, index) => ({
+        ...player,
+        isIt: index === itIndex
+      }));
     }
     
-    console.log('Game starting...');
-    gameState.gameStarted = true;
-    
-    // Choose a random player as the tagger
-    const randomPlayer = getRandomPlayer(gameState.players);
-    setNewTagger(randomPlayer.id);
-    
-    // Broadcast game started
-    io.emit('gameStarted', {
-      gameStarted: true,
-      currentTagger: gameState.currentTagger,
-      tagCooldown: gameState.tagCooldown,
-      players: gameState.players
-    });
-  });
-
-  // Check for tag (manual tag attempt)
-  socket.on('checkForTag', () => {
-    // Check if the game is started and this player is the tagger
-    if (!gameState.gameStarted) return;
-    
-    const taggerIndex = gameState.players.findIndex(player => player.id === socket.id);
-    if (taggerIndex === -1 || gameState.players[taggerIndex].id !== gameState.currentTagger) {
-      console.log('Non-tagger tried to tag someone');
-      return;
-    }
-    
-    // Check if tagger is on cooldown
-    if (Date.now() < gameState.tagCooldown) {
-      console.log('Tagger on cooldown');
-      socket.emit('tagResult', { 
-        success: false, 
-        message: 'You are on cooldown' 
-      });
-      return;
-    }
-    
-    const tagger = gameState.players[taggerIndex];
-    let taggedPlayer = null;
-    let shortestDistance = Infinity;
-    
-    // Find the closest player within tag radius
-    gameState.players.forEach(player => {
-      if (player.id !== socket.id && player.location && tagger.location) {
-        const distance = calculateDistance(tagger.location, player.location);
-        
-        if (distance <= gameState.tagRadius && distance < shortestDistance) {
-          shortestDistance = distance;
-          taggedPlayer = player;
-        }
-      }
-    });
-    
-    if (taggedPlayer) {
-      console.log(`${tagger.username} tagged ${taggedPlayer.username} (${shortestDistance}m)`);
-      
-      // Update score for tagger
-      tagger.score += 1;
-      
-      // Notify everyone about the tag
-      io.emit('playerTagged', {
-        taggerId: tagger.id,
-        taggerName: tagger.username,
-        taggedId: taggedPlayer.id,
-        taggedName: taggedPlayer.username,
-        distance: Math.round(shortestDistance),
-        timestamp: Date.now()
-      });
-      
-      // Tell the tagger they were successful
-      socket.emit('tagResult', {
-        success: true,
-        message: `You tagged ${taggedPlayer.username}!`
-      });
-      
-      // Set the tagged player as the new tagger
-      setNewTagger(taggedPlayer.id);
-    } else {
-      // Tell the tagger they failed
-      socket.emit('tagResult', {
-        success: false,
-        message: 'No players within tagging range'
-      });
-    }
-  });
-
-  // Transfer host
-  socket.on('transferHost', (newHostId) => {
-    // Check if this socket is the current host
-    const playerIndex = gameState.players.findIndex(player => player.id === socket.id);
-    if (playerIndex === -1 || !gameState.players[playerIndex].isHost) {
-      console.log('Non-host tried to transfer host privileges');
-      return;
-    }
-    
-    // Find the new host
-    const newHostIndex = gameState.players.findIndex(player => player.id === newHostId);
-    if (newHostIndex === -1) {
-      console.log('Cannot find new host player');
-      return;
-    }
-    
-    // Update host status
-    gameState.players[playerIndex].isHost = false;
-    gameState.players[newHostIndex].isHost = true;
-    
-    console.log(`Host transferred from ${gameState.players[playerIndex].username} to ${gameState.players[newHostIndex].username}`);
-    
-    // Notify new host
-    io.to(newHostId).emit('youAreHost');
-    
-    // Update all players
+    io.emit('gameStarted', gameState);
     io.emit('updatePlayers', gameState.players);
+  });
+
+  // Handle host transfer request
+  socket.on('transferHost', (newHostId) => {
+    console.log(`Host transfer request from ${socket.id} to ${newHostId}`);
+    
+    // Check if the requesting socket is the current host
+    const currentHostIndex = gameState.players.findIndex(p => p.isHost === true);
+    const newHostIndex = gameState.players.findIndex(p => p.id === newHostId);
+    
+    console.log('Current host index:', currentHostIndex);
+    console.log('New host index:', newHostIndex);
+    console.log('Current host ID:', currentHostIndex !== -1 ? gameState.players[currentHostIndex].id : 'none');
+    
+    if (currentHostIndex !== -1 && gameState.players[currentHostIndex].id === socket.id && newHostIndex !== -1) {
+      console.log(`Transferring host from ${gameState.players[currentHostIndex].username} to ${gameState.players[newHostIndex].username}`);
+      
+      // Remove host status from current host
+      gameState.players[currentHostIndex].isHost = false;
+      
+      // Set new host
+      gameState.players[newHostIndex].isHost = true;
+      
+      // Notify new host
+      io.to(newHostId).emit('youAreHost');
+      
+      // Notify all clients of updated player list
+      io.emit('updatePlayers', gameState.players);
+    } else {
+      console.log('Host transfer failed: Invalid request');
+      if (currentHostIndex === -1) {
+        console.log('No current host found');
+      } else if (gameState.players[currentHostIndex].id !== socket.id) {
+        console.log('Requesting player is not the host');
+      } else if (newHostIndex === -1) {
+        console.log('New host not found in players list');
+      }
+    }
   });
 
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
     
-    // Check if the disconnected player was the host or tagger
+    // Check if the disconnected player was the host
     const wasHost = gameState.players.some(p => p.id === socket.id && p.isHost);
-    const wasTagger = gameState.currentTagger === socket.id;
     
     // Remove player from game
     gameState.players = gameState.players.filter(player => player.id !== socket.id);
     
-    // Handle tagger disconnection
-    if (wasTagger && gameState.gameStarted && gameState.players.length > 0) {
-      const newTagger = getRandomPlayer(gameState.players);
-      setNewTagger(newTagger.id);
-      io.emit('systemMessage', `${newTagger.username} is the new tagger!`);
-    }
-    
-    // Handle host disconnection
+    // If host left and there are other players, assign a new host
     if (wasHost && gameState.players.length > 0) {
       gameState.players[0].isHost = true;
       const newHostId = gameState.players[0].id;
       console.log(`Assigning new host: ${gameState.players[0].username}`);
-      
       // Notify the new host
       io.to(newHostId).emit('youAreHost');
     }
     
     io.emit('updatePlayers', gameState.players);
   });
+
+  // Handle ping/pong for keeping connections alive
+  socket.on('ping', () => {
+    socket.emit('pong');
+  });
+
+  // Add a new socket event for checking tags
+  socket.on('checkTag', () => {
+    const now = Date.now();
+    
+    // Don't process if we're in cooldown
+    if (now - lastTagTime < TAG_COOLDOWN) {
+      // Add debug log for cooldown
+      console.log(`Tag check: Cooldown active. ${Math.floor((TAG_COOLDOWN - (now - lastTagTime))/1000)}s remaining`);
+      return;
+    }
+    
+    const currentPlayer = gameState.players.find(p => p.id === socket.id);
+    if (!currentPlayer || !currentPlayer.location) {
+      console.log('Tag check: Current player not found or has no location');
+      return;
+    }
+    
+    // Only process if this player is "it"
+    if (!currentPlayer.isIt) {
+      console.log(`Tag check: ${currentPlayer.username} is not "it"`);
+      return;
+    }
+    
+    console.log(`Tag check: ${currentPlayer.username} is looking for players to tag`);
+    
+    // Find a player to tag
+    const taggedPlayer = gameState.players.find(p => {
+      // Skip self and players who are already "it"
+      if (p.id === socket.id || p.isIt) return false;
+      
+      // Calculate distance
+      const distance = calculateDistance(currentPlayer.location, p.location);
+      console.log(`Distance to ${p.username}: ${distance} (threshold: ${TAG_DISTANCE})`);
+      return distance < TAG_DISTANCE;
+    });
+    
+    // If we found someone to tag
+    if (taggedPlayer) {
+      console.log(`${currentPlayer.username} tagged ${taggedPlayer.username}!`);
+      
+      // Update who is "it"
+      gameState.players = gameState.players.map(p => ({
+        ...p,
+        isIt: p.id === taggedPlayer.id
+      }));
+      
+      // Update the last tag time
+      lastTagTime = now;
+      
+      // Notify everyone about the tag
+      io.emit('playerTagged', {
+        tagger: currentPlayer.username,
+        tagged: taggedPlayer.username
+      });
+      
+      // Send updated players list
+      io.emit('updatePlayers', gameState.players);
+    } else {
+      console.log(`No players in range for ${currentPlayer.username} to tag`);
+    }
+  });
 });
+
+// Set up a periodic cleanup process to check for disconnected players
+setInterval(() => {
+  // Check if any sockets are disconnected
+  const connectedSockets = Array.from(io.sockets.sockets.keys());
+  const disconnectedPlayers = gameState.players.filter(p => !connectedSockets.includes(p.id));
+  
+  if (disconnectedPlayers.length > 0) {
+    console.log('Cleaning up disconnected players:', disconnectedPlayers.map(p => p.username));
+    
+    // For each disconnected player, check if they were host
+    disconnectedPlayers.forEach(player => {
+      const wasHost = player.isHost;
+      
+      // Remove from players list
+      gameState.players = gameState.players.filter(p => p.id !== player.id);
+      
+      // If host left and there are other players, assign a new host
+      if (wasHost && gameState.players.length > 0) {
+        gameState.players[0].isHost = true;
+        const newHostId = gameState.players[0].id;
+        console.log(`Assigning new host due to cleanup: ${gameState.players[0].username}`);
+        io.to(newHostId).emit('youAreHost');
+      }
+    });
+    
+    // Notify all clients of updated player list
+    io.emit('updatePlayers', gameState.players);
+  }
+}, 10000); // Check every 10 seconds
 
 // Basic route for testing
 app.get('/', (req, res) => {
-  res.send('Game Server is running');
+  res.send('Tag Game Server is running');
 });
 
 // Start the server
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => { // Listen on all interfaces
   console.log(`Server running on port ${PORT}`);
 });
+
+// Also add throttling to updatePlayers broadcasts
+// Keep a timestamp of the last broadcast
+let lastUpdateBroadcast = Date.now();
+
+// Create a throttled version of the broadcast
+const throttledEmitUpdate = () => {
+  const now = Date.now();
+  if (now - lastUpdateBroadcast > 5000) { // 5 seconds between broadcasts (instead of 2)
+    io.emit('updatePlayers', gameState.players);
+    lastUpdateBroadcast = now;
+  }
+};

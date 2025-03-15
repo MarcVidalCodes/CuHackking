@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
@@ -10,7 +10,8 @@ export default function GameScreen() {
   const { myLocation, players, currentUser, error, lastTagMessage, checkForTag } = useLocation();
   const mapRef = useRef<MapView | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [userMovedMap, setUserMovedMap] = useState(false);
+  const [mapKey, setMapKey] = useState(1); // Add a key to force remount if needed
+  const [userMovedMap, setUserMovedMap] = useState(false); // Add this state to track if user has manually moved the map
   
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: myLocation?.latitude || 37.78825,
@@ -23,133 +24,186 @@ export default function GameScreen() {
   useEffect(() => {
     // Only update the map region if:
     // 1. We have a location AND
-    // 2. User hasn't manually moved the map
-    if (myLocation && !userMovedMap) {
+    // 2. Either it's the first time loading OR user hasn't manually moved the map
+    if (myLocation && myLocation.latitude && myLocation.longitude && !userMovedMap) {
       const newRegion = {
         latitude: myLocation.latitude,
         longitude: myLocation.longitude,
-        latitudeDelta: mapRegion.latitudeDelta,
-        longitudeDelta: mapRegion.longitudeDelta,
+        latitudeDelta: mapRegion.latitudeDelta, // Preserve current zoom
+        longitudeDelta: mapRegion.longitudeDelta, // Preserve current zoom
       };
       
-      setMapRegion(newRegion);
-      
-      // Animate map to new position
-      if (mapRef.current && mapReady) {
-        mapRef.current.animateToRegion(newRegion, 300);
-      }
+      // Update map without animation to avoid jumps
+      mapRef.current?.setCamera({
+        center: {
+          latitude: myLocation.latitude,
+          longitude: myLocation.longitude,
+        },
+        // Don't change the zoom level
+      });
     }
-  }, [myLocation, userMovedMap, mapReady]);
+  }, [myLocation, userMovedMap]);
 
-  const handleMapReady = () => {
-    setMapReady(true);
-  };
+  // Handle map errors by remounting
+  useEffect(() => {
+    const mapErrorTimeout = setTimeout(() => {
+      if (!mapReady) {
+        console.log("Map failed to load, remounting...");
+        setMapKey(prev => prev + 1);
+      }
+    }, 5000);
 
-  // Handle user map movement - track when they manually move the map
-  const handleRegionChangeComplete = (region: Region) => {
+    return () => clearTimeout(mapErrorTimeout);
+  }, [mapReady]);
+
+  // Find the player who is "it"
+  const itPlayer = players.find(player => player.isIt);
+  
+  // Find current player in the players list
+  const currentPlayerData = players.find(player => currentUser && player.id === currentUser.id);
+  const isCurrentPlayerIt = currentPlayerData?.isIt || false;
+
+  const recenterMap = () => {
     if (myLocation) {
-      // Check if this change was more than a small delta from current position
-      // (to differentiate between automatic updates and user movement)
-      const latDiff = Math.abs(region.latitude - myLocation.latitude);
-      const lonDiff = Math.abs(region.longitude - myLocation.longitude);
-      
-      if (latDiff > 0.0005 || lonDiff > 0.0005) {
-        setUserMovedMap(true);
-      }
+      mapRef.current?.animateCamera({
+        center: {
+          latitude: myLocation.latitude,
+          longitude: myLocation.longitude,
+        }
+      });
+      setUserMovedMap(false); // Allow auto-centering again
     }
-    
-    setMapRegion(region);
   };
 
-  const handleRecenterMap = () => {
-    if (!myLocation) return;
+  const renderPlayerMarkers = () => {
+    if (!mapReady) return null;
     
-    const newRegion = {
-      latitude: myLocation.latitude,
-      longitude: myLocation.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
-    
-    setMapRegion(newRegion);
-    mapRef.current?.animateToRegion(newRegion, 300);
-    setUserMovedMap(false);
+    // Only render markers for players with valid coordinates
+    return players.filter(player => 
+      player.location && 
+      typeof player.location.latitude === 'number' && 
+      typeof player.location.longitude === 'number' &&
+      !isNaN(player.location.latitude) && 
+      !isNaN(player.location.longitude)
+    ).map(player => (
+      <PlayerMarker
+        key={player.id}
+        player={player}
+        isCurrentUser={currentUser?.id === player.id}
+      />
+    ));
   };
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   if (!myLocation) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.container}>
         <ActivityIndicator size="large" color="#4285F4" />
         <Text style={styles.loadingText}>Getting your location...</Text>
       </View>
     );
   }
 
-  const isPlayerTagger = currentUser && 
-    players.find(p => p.id === currentUser.id)?.isTagger;
-
   return (
     <View style={styles.container}>
-      <GameStatusBar />
-      
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-      
-      {lastTagMessage && (
-        <View style={styles.tagMessageContainer}>
-          <Text style={styles.tagMessageText}>{lastTagMessage}</Text>
-        </View>
-      )}
-      
-      <View style={styles.mapContainer}>
+      {Platform.OS === 'ios' ? (
         <MapView
+          key={`map-${mapKey}`}
           ref={mapRef}
           style={styles.map}
-          region={mapRegion}
-          onMapReady={handleMapReady}
-          onRegionChangeComplete={handleRegionChangeComplete}
-          showsUserLocation={false}
-          showsMyLocationButton={false}
-          showsCompass={true}
+          showsUserLocation={false} // Change to false to hide default blue marker
+          initialRegion={mapRegion}
+          onMapReady={() => {
+            console.log("Map is ready");
+            setMapReady(true);
+          }}
+          onError={(error) => {
+            console.error("Map error:", error);
+          }}
+          onRegionChangeComplete={() => {
+            // User has moved the map
+            setUserMovedMap(true);
+          }}
         >
-          {players.map((player) => (
+          {mapReady && players.filter(player => 
+            player.location && 
+            typeof player.location.latitude === 'number' && 
+            !isNaN(player.location.latitude)
+          ).map(player => (
             <PlayerMarker
               key={player.id}
               player={player}
-              isCurrentUser={player.id === currentUser?.id}
+              isCurrentUser={currentUser?.id === player.id}
             />
           ))}
         </MapView>
-        
-        {userMovedMap && (
-          <TouchableOpacity 
-            style={styles.recenterButton}
-            onPress={handleRecenterMap}
-          >
-            <Text style={styles.recenterButtonText}>Recenter</Text>
-          </TouchableOpacity>
-        )}
-        
-        {isPlayerTagger && (
-          <TouchableOpacity 
-            style={styles.tagButton}
-            onPress={checkForTag}
-          >
-            <Text style={styles.tagButtonText}>TAG!</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      ) : (
+        <MapView
+          key={`map-${mapKey}`}
+          ref={mapRef}
+          style={styles.map}
+          showsUserLocation={false} // Change to false to hide default blue marker
+          initialRegion={mapRegion}
+          onMapReady={() => {
+            console.log("Map is ready");
+            setMapReady(true);
+          }}
+          onRegionChangeComplete={() => {
+            // User has moved the map
+            setUserMovedMap(true);
+          }}
+        >
+          {mapReady && players.filter(player => 
+            player.location && 
+            typeof player.location.latitude === 'number' && 
+            !isNaN(player.location.latitude)
+          ).map(player => (
+            <PlayerMarker
+              key={player.id}
+              player={player}
+              isCurrentUser={currentUser?.id === player.id}
+            />
+          ))}
+        </MapView>
+      )}
+
+      <GameStatusBar 
+        itPlayerName={itPlayer?.username || 'Unknown'} 
+        isCurrentPlayerIt={isCurrentPlayerIt}
+        playersCount={players.length}
+      />
+
+      <PlayersList 
+        players={players} 
+        currentUserId={currentUser?.id}
+      />
       
-      <View style={styles.playersContainer}>
-        <Text style={styles.playersHeader}>Players</Text>
-        <PlayersList 
-          players={players} 
-          currentUserId={currentUser?.id} 
-        />
-      </View>
+      {/* Add tag button if current player is "it" */}
+      {isCurrentPlayerIt && (
+        <TouchableOpacity 
+          style={styles.tagButton}
+          onPress={() => checkForTag()}
+        >
+          <Text style={styles.tagButtonText}>👋 TAG!</Text>
+        </TouchableOpacity>
+      )}
+      
+      {lastTagMessage && (
+        <View style={styles.tagMessage}>
+          <Text style={styles.tagMessageText}>{lastTagMessage}</Text>
+        </View>
+      )}
+
+      <TouchableOpacity style={styles.recenterButton} onPress={recenterMap}>
+        <Text style={styles.recenterButtonText}>📍</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -157,88 +211,87 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
-  },
-  loadingContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  map: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  },
+  errorText: {
+    fontSize: 18,
+    color: 'red',
+    textAlign: 'center',
+    padding: 20,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
   },
-  errorContainer: {
-    backgroundColor: '#ffdddd',
+  gameInfo: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255,255,255,0.8)',
     padding: 10,
-    margin: 10,
-    borderRadius: 5,
+    alignItems: 'center',
   },
-  errorText: {
-    color: '#d32f2f',
-    textAlign: 'center',
-  },
-  tagMessageContainer: {
-    backgroundColor: '#e8f5e9',
-    padding: 10,
-    margin: 10,
-    borderRadius: 5,
-  },
-  tagMessageText: {
-    color: '#2e7d32',
-    textAlign: 'center',
-  },
-  mapContainer: {
-    height: Dimensions.get('window').height * 0.6,
-    width: '100%',
-    position: 'relative',
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
+  infoText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   recenterButton: {
     position: 'absolute',
-    bottom: 90,
-    right: 16,
+    bottom: 30,
+    right: 20,
     backgroundColor: 'white',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    elevation: 4,
+    borderRadius: 30,
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   recenterButtonText: {
-    fontWeight: '500',
+    fontSize: 24,
   },
   tagButton: {
     position: 'absolute',
-    bottom: 20,
-    alignSelf: 'center',
-    backgroundColor: '#FF5252',
-    paddingVertical: 15,
-    paddingHorizontal: 40,
-    borderRadius: 30,
-    elevation: 4,
+    bottom: 90,
+    right: 10,
+    backgroundColor: '#FF0000',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   tagButtonText: {
     color: 'white',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  playersContainer: {
-    padding: 16,
-    flex: 1,
-  },
-  playersHeader: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
+  },
+  tagMessage: {
+    position: 'absolute',
+    bottom: 150,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  tagMessageText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });

@@ -9,11 +9,17 @@ interface PlayerMarkerProps {
 }
 
 export default function PlayerMarker({ player, isCurrentUser }: PlayerMarkerProps) {
+  // Safeguard against invalid coordinates
   if (!player.location || 
       typeof player.location.latitude !== 'number' || 
-      isNaN(player.location.latitude)) {
+      typeof player.location.longitude !== 'number' ||
+      isNaN(player.location.latitude) ||
+      isNaN(player.location.longitude)) {
     return null;
   }
+  
+  // Determine if this marker should be shown as "it" (red)
+  const showAsIt = player.isIt;
   
   return (
     <Marker
@@ -21,10 +27,13 @@ export default function PlayerMarker({ player, isCurrentUser }: PlayerMarkerProp
         latitude: player.location.latitude,
         longitude: player.location.longitude,
       }}
+      title={`${player.username}${isCurrentUser ? ' (You)' : ''}`}
+      description={player.isIt ? 'IT! Tag others!' : 'Safe'}
+      // Don't use pinColor for custom markers
     >
       <View style={[
         styles.markerContainer, 
-        isCurrentUser ? styles.currentUserMarker : styles.otherUserMarker
+        showAsIt ? styles.itMarker : styles.safeMarker
       ]}>
         <Text style={styles.markerText}>
           {player.username.charAt(0).toUpperCase()}
@@ -35,7 +44,10 @@ export default function PlayerMarker({ player, isCurrentUser }: PlayerMarkerProp
       <Callout>
         <View style={styles.callout}>
           <Text style={styles.calloutTitle}>{player.username}</Text>
-          <Text>{isCurrentUser ? "(You)" : ""}</Text>
+          <Text style={styles.calloutInfo}>
+            {player.isIt ? "IT!" : "Safe"} 
+            {isCurrentUser ? " (You)" : ""}
+          </Text>
           {player.isHost && <Text style={styles.hostText}>Host</Text>}
         </View>
       </Callout>
@@ -53,11 +65,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'white',
   },
-  currentUserMarker: {
-    backgroundColor: '#4285F4',
+  itMarker: {
+    backgroundColor: '#FF0000',
   },
-  otherUserMarker: {
-    backgroundColor: '#34A853',
+  safeMarker: {
+    backgroundColor: '#4285F4',
   },
   markerText: {
     fontSize: 16,
@@ -83,6 +95,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
     marginBottom: 4,
+  },
+  calloutInfo: {
+    fontSize: 12,
   },
   hostText: {
     fontSize: 12,

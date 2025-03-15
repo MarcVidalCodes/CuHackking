@@ -1,120 +1,93 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
-import MapView from 'react-native-maps';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, Button, FlatList, ActivityIndicator } from 'react-native';
 import { useLocation } from '../context/LocationContext';
-import PlayerMarker from '../components/PlayerMarker';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation';
+import PlayerItem from '../components/PlayerItem';
+
+type LobbyScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Lobby'>;
 
 export default function LobbyScreen() {
-  const { myLocation, players, currentUser, isHost, error, startGame, transferHost, gameStarted } = useLocation();
-  const navigation = useNavigation();
+  const [username, setUsername] = useState('');
+  const [hasJoined, setHasJoined] = useState(false);
+  const [isStartingGame, setIsStartingGame] = useState(false);
+  const { players, joinGame, startGame, currentUser, gameStarted, isHost, error } = useLocation();
+  const navigation = useNavigation<LobbyScreenNavigationProp>();
 
-  // Navigate to game screen if game starts
   useEffect(() => {
+    // Only navigate after gameStarted is true
     if (gameStarted) {
-      navigation.navigate('Game' as never);
+      navigation.replace('Game');
     }
   }, [gameStarted, navigation]);
 
-  if (!myLocation) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#4285F4" />
-        <Text style={styles.loadingText}>Getting your location...</Text>
-      </View>
-    );
-  }
-
-  // Render a player item for the player list
-  const renderPlayerItem = ({ item }: { item: any }) => {
-    const isCurrentUser = currentUser?.id === item.id;
-    
-    return (
-      <TouchableOpacity 
-        style={[styles.playerItem, isCurrentUser && styles.currentPlayerItem]}
-        onLongPress={() => {
-          if (isHost && !isCurrentUser) {
-            Alert.alert(
-              "Transfer Host",
-              `Make ${item.username} the host?`,
-              [
-                { text: "Cancel", style: "cancel" },
-                { 
-                  text: "Confirm", 
-                  onPress: () => transferHost(item.id)
-                }
-              ]
-            );
-          }
-        }}
-      >
-        <Text style={styles.playerName}>
-          {item.username} {isCurrentUser ? '(You)' : ''}
-        </Text>
-        {item.isHost && <Text style={styles.hostTag}>Host</Text>}
-      </TouchableOpacity>
-    );
+  const handleJoinGame = () => {
+    if (username.trim()) {
+      joinGame(username);
+      setHasJoined(true);
+    }
   };
 
   const handleStartGame = () => {
-    if (players.length < 2) {
-      Alert.alert("Cannot Start Game", "You need at least 2 players to start the game.");
-      return;
-    }
-    
+    // Set starting flag but don't navigate yet
+    setIsStartingGame(true);
     startGame();
+    // The navigation happens in the useEffect when gameStarted becomes true
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.welcomeText}>Game Lobby</Text>
+      <Text style={styles.title}>Tag Game Lobby</Text>
+      
       {error && <Text style={styles.errorText}>{error}</Text>}
       
-      <Text style={styles.playersText}>
-        Players ({players.length})
-        {isHost && <Text style={styles.hostNote}> - Long press to transfer host</Text>}
-      </Text>
-      
-      <FlatList
-        data={players}
-        renderItem={renderPlayerItem}
-        keyExtractor={(item) => item.id}
-        style={styles.playersList}
-      />
-      
-      <View style={styles.mapContainer}>
-        <MapView
-          style={styles.map}
-          initialRegion={{
-            latitude: myLocation.latitude,
-            longitude: myLocation.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-        >
-          {players.map((player) => (
-            <PlayerMarker
-              key={player.id}
-              player={player}
-              isCurrentUser={player.id === currentUser?.id}
+      {!hasJoined ? (
+        <View style={styles.joinForm}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your username"
+            value={username}
+            onChangeText={setUsername}
+          />
+          <Button title="Join Game" onPress={handleJoinGame} />
+        </View>
+      ) : (
+        <>
+          <Text style={styles.waitingText}>
+            {players.length > 0 ? `Players in lobby: ${players.length}` : 'Waiting for players to join...'}
+          </Text>
+          
+          <FlatList
+            data={players}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <PlayerItem 
+                player={item}
+                isCurrentUser={currentUser?.id === item.id}
+              />
+            )}
+            style={styles.playerList}
+          />
+          
+          {isStartingGame ? (
+            <View style={styles.startingContainer}>
+              <ActivityIndicator size="small" color="#4285F4" />
+              <Text style={styles.startingText}>Starting game...</Text>
+            </View>
+          ) : isHost ? (
+            <Button 
+              title="Start Game" 
+              onPress={handleStartGame} 
+              disabled={players.length < 1}
             />
-          ))}
-        </MapView>
-      </View>
-      
-      {isHost && (
-        <TouchableOpacity 
-          style={styles.startButton}
-          onPress={handleStartGame}
-        >
-          <Text style={styles.startButtonText}>Start Game</Text>
-        </TouchableOpacity>
-      )}
-
-      {!isHost && (
-        <Text style={styles.waitingText}>
-          Waiting for host to start the game...
-        </Text>
+          ) : (
+            <View style={styles.waitingContainer}>
+              <ActivityIndicator size="small" color="#0000ff" />
+              <Text style={styles.waitingHostText}>Waiting for host to start game...</Text>
+            </View>
+          )}
+        </>
       )}
     </View>
   );
@@ -124,83 +97,56 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  welcomeText: {
+  title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 20,
   },
   errorText: {
     color: 'red',
     marginBottom: 10,
   },
-  playersText: {
-    fontSize: 18,
-    marginVertical: 10,
-    fontWeight: 'bold',
+  joinForm: {
+    width: '100%',
+    alignItems: 'center',
   },
-  hostNote: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: 'normal',
-  },
-  playersList: {
-    maxHeight: 150,
-    marginBottom: 15,
-  },
-  playerItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  currentPlayerItem: {
-    backgroundColor: '#f0f8ff',
-  },
-  playerName: {
-    fontSize: 16,
-  },
-  hostTag: {
-    backgroundColor: '#FFC107',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    fontSize: 12,
-  },
-  mapContainer: {
-    flex: 1,
-    borderRadius: 10,
-    overflow: 'hidden',
+  input: {
+    width: '100%',
     borderWidth: 1,
     borderColor: '#ccc',
-    marginBottom: 15,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-  },
-  startButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  startButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 20,
   },
   waitingText: {
-    textAlign: 'center',
+    fontSize: 18,
+    marginVertical: 20,
+  },
+  playerList: {
+    width: '100%',
+    marginVertical: 20,
+  },
+  waitingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  waitingHostText: {
+    marginLeft: 10,
     fontSize: 16,
-    color: '#666',
-    marginBottom: 10,
-    fontStyle: 'italic',
+    color: '#555',
+  },
+  startingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+  },
+  startingText: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: '#4285F4',
   }
 });

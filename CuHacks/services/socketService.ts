@@ -1,6 +1,5 @@
 import io, { Socket } from 'socket.io-client';
-import { Coordinates } from '../types';
-
+import { Coordinates, GameState, Player } from '../types';
 
 const SOCKET_SERVER_URL = 'http://172.17.67.197:3000';
 
@@ -8,6 +7,8 @@ class SocketService {
   private socket: Socket | null = null;
   private connected: boolean = false;
   private eventHandlers: Record<string, Function[]> = {};
+  private previousPlayerCount: number = 0;
+  private lastPlayerUpdateLog = 0;
 
   constructor() {
     this.connect();
@@ -20,7 +21,11 @@ class SocketService {
 
     console.log("SocketService: Connecting to", SOCKET_SERVER_URL);
     this.socket = io(SOCKET_SERVER_URL, {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      forceNew: false
     });
 
     this.setupListeners();
@@ -39,6 +44,14 @@ class SocketService {
       console.log("SocketService: Disconnected -", reason);
       this.connected = false;
       this.emitEvent('disconnect', reason);
+      
+      // Auto-reconnect
+      if (reason === 'io client disconnect' || reason === 'transport close') {
+        setTimeout(() => {
+          console.log("SocketService: Attempting reconnect...");
+          this.socket?.connect();
+        }, 1000);
+      }
     });
 
     this.socket.on('connect_error', (error) => {
@@ -46,8 +59,14 @@ class SocketService {
       this.emitEvent('error', error);
     });
 
-    this.socket.on('updatePlayers', (players) => {
+    this.socket.on('updatePlayers', (players: Player[]) => {
+      console.log("SocketService: Received players update", players.length);
       this.emitEvent('updatePlayers', players);
+    });
+
+    this.socket.on('gameStarted', (gameState: GameState) => {
+      console.log("SocketService: Game started");
+      this.emitEvent('gameStarted', gameState);
     });
 
     this.socket.on('youAreHost', () => {
@@ -93,8 +112,16 @@ class SocketService {
     return this.emit('joinGame', { username });
   }
 
+  startGame() {
+    return this.emit('startGame');
+  }
+
   updateLocation(location: Coordinates) {
     return this.emit('updateLocation', location);
+  }
+
+  transferHost(playerId: string) {
+    return this.emit('transferHost', playerId);
   }
 
   getSocketId() {
@@ -112,10 +139,31 @@ class SocketService {
       this.connected = false;
     }
   }
+
+  // Game state events
+  updatePlayersHandler(updatedPlayers: Player[]) {
+    // Only log player updates once every 10 seconds max
+    const now = Date.now();
+    if (now - this.lastPlayerUpdateLog > 10000) {
+      console.log('Players updated:', updatedPlayers.length);
+      this.lastPlayerUpdateLog = now;
+    }
+    
+    setPlayers(updatedPlayers);
+    
+    // Check if current user is host (only if needed)
+    if (currentUser && !currentUser.isHost) {
+      const me = updatedPlayers.find(p => p.id === currentUser.id);
+      if (me && me.isHost) {
+        setIsHost(true);
+        setCurrentUser(prev => prev ? {...prev, isHost: true} : null);
+      }
+    }
+  }
 }
 
 // Create singleton instance
-const socketService = new SocketService();
+export const socketService = new SocketService();
 
 // Export for use in components
 export default socketService;
