@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 
 import LobbyScreen from '../screens/LobbyScreen';
 import GameScreen from '../screens/GameScreen';
+import WaitingScreen from '../screens/WaitingScreen';
 import TermsScreen from '../screens/TermsScreen';
 import SinglePlayerSetupScreen from '../screens/SinglePlayerSetupScreen';
 import { useLocation } from '../context/LocationContext';
@@ -11,6 +12,7 @@ import { useLocation } from '../context/LocationContext';
 export type RootStackParamList = {
   Terms: undefined;
   Lobby: undefined;
+  Waiting: undefined;
   Game: undefined;
   SinglePlayerSetup: { username: string };
   // ...other screens
@@ -34,6 +36,10 @@ export default function Navigation() {
         <Stack.Screen 
           name="Lobby" 
           component={LobbyScreen} 
+        />
+        <Stack.Screen 
+          name="Waiting" 
+          component={WaitingScreen} 
         />
         <Stack.Screen 
           name="Game" 

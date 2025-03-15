@@ -30,6 +30,7 @@ export default function LobbyScreen() {
     if (username.trim()) {
       joinGame(username);
       setHasJoined(true);
+      navigation.replace('Waiting');
     }
   };
 
