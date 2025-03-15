@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "tag-game",
-    "slug": "tag-game",
+    "name": "CuHacks",
+    "slug": "CuHacks",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,14 +23,6 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "This app needs your location to find nearby players."
-        }
-      ]
-    ]
+    }
   }
 }

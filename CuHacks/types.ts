@@ -3,9 +3,8 @@ export interface Coordinates {
     longitude: number;
   }
   
-  export interface Player {
+export interface Player {
     id: string;
     username: string;
     location?: Coordinates;
-    isHost: boolean;
-  }
+}
