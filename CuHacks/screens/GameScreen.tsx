@@ -192,9 +192,9 @@ export default function GameScreen() {
   const shrinkCircle = useCallback(() => {
     if (!circleCenter || isShrinking) return;
     
-    // Calculate new radius (80% of current, but not smaller than 20m)
+    // Calculate new radius (80% of current, but not smaller than 50m)
     const startRadius = circleRadius;
-    const endRadius = Math.max(20, startRadius * 0.8);
+    const endRadius = Math.max(50, startRadius * 0.8);
     
     // Use the pre-calculated future circle if available
     const newCenter = futureCircle ? futureCircle.center : calculateNewCenter(circleCenter, startRadius, endRadius);
@@ -261,7 +261,7 @@ export default function GameScreen() {
       setTimerSeconds(prev => {
         // When timer hits 5, calculate and show the future circle
         if (prev === 5 && !futureCircle && circleCenter) {
-          const newRadius = Math.max(20, circleRadius * 0.8);
+          const newRadius = Math.max(50, circleRadius * 0.8);
           const newCenter = calculateNewCenter(circleCenter, circleRadius, newRadius);
           setFutureCircle({
             center: newCenter,
