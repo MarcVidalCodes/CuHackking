@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import * as Location from 'expo-location';
 import { Coordinates, Player, GameState } from '../types';
 import socketService from '../services/socketService';
+import aiPlayerManager from '../services/aiPlayerManager';
 
 interface CurrentUser {
   id: string;
@@ -28,6 +29,9 @@ interface LocationContextType {
   checkForTag: () => void;
   lastTagMessage: string | null;
   updateGameSettings: (settings: GameSettings) => void;
+  singlePlayerMode: boolean;
+  startSinglePlayerGame: (username: string, aiCount: number, difficulty: string, duration: number) => void;
+  resetGame: () => void;
 }
 
 const LocationContext = createContext<LocationContextType | null>(null);
@@ -42,6 +46,8 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [lastTagMessage, setLastTagMessage] = useState<string | null>(null);
   const [gameSettings, setGameSettings] = useState<GameSettings>({ duration: 5 });
   const [gameTimeRemaining, setGameTimeRemaining] = useState<number | null>(null);
+  const [singlePlayerMode, setSinglePlayerMode] = useState(false);
+  const [aiUpdateInterval, setAiUpdateInterval] = useState<NodeJS.Timeout | null>(null);
   const locationSubscription = useRef<any>(null);
   const hasRequestedPermissions = useRef(false);
   const gameTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -340,13 +346,181 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   };
 
   const checkForTag = () => {
-    socketService.emit('checkTag');
+    if (!gameStarted || !myLocation || !currentUser) {
+      return;
+    }
+
+    const me = players.find(p => p.id === currentUser.id);
+    if (!me) return;
+
+    // For multiplayer mode, use the socketService
+    if (!singlePlayerMode) {
+      socketService.emit('checkTag');
+      return;
+    }
+    
+    // For single player mode, handle tags locally
+    if (me.isIt) {
+      // Check if player can tag any AI players
+      const tagRadius = 20; // meters
+      
+      for (const player of players) {
+        if (player.id === currentUser.id || !player.isAI || !player.location) {
+          continue; // Skip self, non-AI players, or players without location
+        }
+        
+        // Calculate distance between current player and AI player
+        const distance = getDistanceBetweenCoordinates(
+          myLocation,
+          player.location
+        );
+        
+        if (distance <= tagRadius) {
+          console.log(`Tagged AI player: ${player.username} at distance ${distance}m`);
+          
+          // Update players list - make the AI player "it" and current player not "it"
+          setPlayers(prevPlayers => prevPlayers.map(p => ({
+            ...p,
+            isIt: p.id === player.id ? true : (p.id === currentUser.id ? false : p.isIt)
+          })));
+          
+          // Show tag message
+          setLastTagMessage(`You tagged ${player.username}!`);
+          
+          // Clear message after 3 seconds
+          setTimeout(() => {
+            setLastTagMessage(null);
+          }, 3000);
+          
+          break;
+        }
+      }
+    } else {
+      // AI players can tag the human player
+      const tagRadius = 20; // meters
+      const itPlayer = players.find(p => p.isIt && p.isAI);
+      
+      if (itPlayer && itPlayer.location) {
+        const distance = getDistanceBetweenCoordinates(myLocation, itPlayer.location);
+        
+        if (distance <= tagRadius) {
+          console.log(`AI player ${itPlayer.username} tagged you at distance ${distance}m`);
+          
+          // Update players list
+          setPlayers(prevPlayers => prevPlayers.map(p => ({
+            ...p,
+            isIt: p.id === currentUser.id ? true : (p.id === itPlayer.id ? false : p.isIt)
+          })));
+          
+          // Show tag message
+          setLastTagMessage(`${itPlayer.username} tagged you!`);
+          
+          // Clear message after 3 seconds
+          setTimeout(() => {
+            setLastTagMessage(null);
+          }, 3000);
+        }
+      }
+    }
+  };
+
+  // Helper function for distance calculation (if not already using geolib)
+  const getDistanceBetweenCoordinates = (coord1: Coordinates, coord2: Coordinates) => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = coord1.latitude * Math.PI/180;
+    const φ2 = coord2.latitude * Math.PI/180;
+    const Δφ = (coord2.latitude-coord1.latitude) * Math.PI/180;
+    const Δλ = (coord2.longitude-coord1.longitude) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c; // Distance in meters
   };
 
   const updateGameSettings = (settings: GameSettings) => {
     setGameSettings(prev => ({ ...prev, ...settings }));
     // Notify server about settings update
     socketService.emit('updateGameSettings', settings);
+  };
+
+  const startSinglePlayerGame = async (username: string, aiCount: number, difficulty: string, duration: number) => {
+    try {
+      // Request location permissions if needed
+      await requestLocationPermissions();
+      
+      // Create player
+      const userId = `local-${Date.now()}`;
+      const newCurrentUser = { id: userId, username, isHost: true };
+      setCurrentUser(newCurrentUser);
+      
+      // Create player object with location
+      const initialLocation = myLocation || { latitude: 0, longitude: 0 };
+      const userPlayer: Player = {
+        id: userId,
+        username,
+        location: initialLocation,
+        isIt: true, // Player starts as "it"
+        isHost: true
+      };
+      
+      // Generate AI players around the player
+      const aiPlayers = aiPlayerManager.generateAIPlayers(aiCount, initialLocation, difficulty);
+      
+      // Combine user and AI players
+      const allPlayers = [userPlayer, ...aiPlayers];
+      setPlayers(allPlayers);
+      
+      // Set up game state
+      setGameStarted(true);
+      setSinglePlayerMode(true);
+      setGameTimeRemaining(duration * 60); // Convert minutes to seconds
+      startGameTimer();
+      
+      // Start AI player update cycle
+      aiPlayerManager.startUpdating(userPlayer, allPlayers, (updatedAIPlayers) => {
+        setPlayers(prevPlayers => {
+          const humanPlayer = prevPlayers.find(p => !p.isAI);
+          return humanPlayer ? [humanPlayer, ...updatedAIPlayers] : updatedAIPlayers;
+        });
+        
+        // Check for tags
+        checkForTag();
+      });
+    } catch (error) {
+      setError(`Failed to start single player game: ${error}`);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      // ...existing cleanup
+      
+      // Stop AI player updates
+      if (singlePlayerMode) {
+        aiPlayerManager.stopUpdating();
+      }
+    };
+  }, [singlePlayerMode]);
+
+  const resetGame = () => {
+    // Stop any active timers
+    if (gameTimerId) {
+      clearInterval(gameTimerId);
+      setGameTimerId(null);
+    }
+    
+    // Reset game state
+    setGameStarted(false);
+    setPlayers([]);
+    setGameTimeRemaining(0);
+    setSinglePlayerMode(false);
+    setIsHost(false);
+    setLastTagMessage(null);
+    
+    // Other reset operations as needed
   };
 
   return (
@@ -365,7 +539,10 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
         transferHost,
         checkForTag,
         lastTagMessage,
-        updateGameSettings
+        updateGameSettings,
+        singlePlayerMode,
+        startSinglePlayerGame,
+        resetGame
       }}
     >
       {children}
