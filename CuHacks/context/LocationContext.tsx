@@ -370,10 +370,10 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     if (!gameStarted || !myLocation || !currentUser) {
       return;
     }
-
+  
     const me = players.find(p => p.id === currentUser.id);
     if (!me) return;
-
+  
     // For multiplayer mode, use the socketService
     if (!singlePlayerMode) {
       socketService.emit('checkTag');
@@ -400,10 +400,28 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
           console.log(`Tagged AI player: ${player.username} at distance ${distance}m`);
           
           // Update players list - make the AI player "it" and current player not "it"
-          setPlayers(prevPlayers => prevPlayers.map(p => ({
-            ...p,
-            isIt: p.id === player.id ? true : (p.id === currentUser.id ? false : p.isIt)
-          })));
+          setPlayers(prevPlayers => {
+            // Create a fully new array
+            const updatedPlayers = prevPlayers.map(p => {
+              if (p.id === player.id) {
+                return {...p, isIt: true}; // Tagged player becomes "it"
+              } else if (p.id === currentUser.id) {
+                return {...p, isIt: false}; // Human player is no longer "it"
+              } else {
+                return {...p, isIt: false}; // No one else is "it"
+              }
+            });
+            
+            // Force update the AI targets after a tag
+            setTimeout(() => {
+              const humanPlayer = updatedPlayers.find(p => p.id === currentUser.id);
+              if (humanPlayer) {
+                aiPlayerManager.forceTargetUpdate(updatedPlayers, humanPlayer);
+              }
+            }, 100);
+            
+            return updatedPlayers;
+          });
           
           // Show tag message
           setLastTagMessage(`You tagged ${player.username}!`);
@@ -428,10 +446,26 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
           console.log(`AI player ${itPlayer.username} tagged you at distance ${distance}m`);
           
           // Update players list
-          setPlayers(prevPlayers => prevPlayers.map(p => ({
-            ...p,
-            isIt: p.id === currentUser.id ? true : (p.id === itPlayer.id ? false : p.isIt)
-          })));
+          setPlayers(prevPlayers => {
+            // Create a fully new array
+            const updatedPlayers = prevPlayers.map(p => {
+              if (p.id === currentUser.id) {
+                return {...p, isIt: true}; // Human becomes "it"
+              } else {
+                return {...p, isIt: false}; // No AI is "it"
+              }
+            });
+            
+            // Force update the AI targets after a tag
+            setTimeout(() => {
+              const humanPlayer = updatedPlayers.find(p => p.id === currentUser.id);
+              if (humanPlayer) {
+                aiPlayerManager.forceTargetUpdate(updatedPlayers, humanPlayer);
+              }
+            }, 100);
+            
+            return updatedPlayers;
+          });
           
           // Show tag message
           setLastTagMessage(`${itPlayer.username} tagged you!`);
