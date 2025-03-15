@@ -29,7 +29,7 @@ export default function TermsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Terms and Conditions</Text>
+      <Text style={styles.title}>Tag Royale</Text>
       
       <ScrollView style={styles.termsContainer}>
         <Text style={styles.termsText}>
@@ -38,8 +38,9 @@ export default function TermsScreen() {
           2. Data Usage: MMMMMM DATAAAAAA{'\n\n'}
           3. Fair Play: No hacking noob{'\n\n'}
           4. Safety: Be safe loser {'\n\n'}
-          5. Have Fun!!!
-          
+          5. Have Fun!!!{'\n\n'}
+          /Make this Fine Print in Post/ {'\n\n'}
+          Prompt ChatGPT: Put something funny here {'\n\n'}
 
         </Text>
       </ScrollView>
@@ -49,7 +50,7 @@ export default function TermsScreen() {
           style={styles.checkbox} 
           onPress={() => setIsChecked(!isChecked)}
         >
-          {isChecked && <MaterialIcons name="check" size={24} color="#4285F4" />}
+          {isChecked && <MaterialIcons name="check" size={20} color="#4285F4" />}
         </TouchableOpacity>
         <Text style={styles.checkboxLabel}>
           I have read and agree to the terms and conditions (L take)
@@ -74,6 +75,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: 'white',
+    paddingTop: '20%', // Add top buffer
   },
   title: {
     fontSize: 24,
@@ -87,10 +89,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     padding: 15,
     borderRadius: 10,
+    
   },
   termsText: {
     fontSize: 16,
     lineHeight: 24,
+    textShadowColor: 'rgba(1, 1, 1, 0.5)',
+    textShadowOffset: { width: 2, height: 1 },
+    textShadowRadius: 5,
   },
   checkboxContainer: {
     flexDirection: 'row',
