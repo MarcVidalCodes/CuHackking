@@ -5,12 +5,16 @@ import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
 import GameStatusBar from '../components/GameStatusBar';
 import PlayersList from '../components/PlayersList';
+<<<<<<< HEAD
 import { formatTime } from '../utils/timeUtils';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation';
 
 type GameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Game'>;
+=======
+import LeaveButton from '../components/LeaveButton';
+>>>>>>> 62e12f72cd4c88d9ab266a909fce11fa5db136df
 
 export default function GameScreen() {
   const { myLocation, players, currentUser, error, lastTagMessage, checkForTag, gameTimeRemaining, gameStarted } = useLocation();
@@ -208,6 +212,8 @@ export default function GameScreen() {
         players={players} 
         currentUserId={currentUser?.id}
       />
+      
+      <LeaveButton />
       
       {/* Add tag button if current player is "it" */}
       {isCurrentPlayerIt && (
