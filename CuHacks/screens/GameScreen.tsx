@@ -5,16 +5,13 @@ import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
 import GameStatusBar from '../components/GameStatusBar';
 import PlayersList from '../components/PlayersList';
-<<<<<<< HEAD
 import { formatTime } from '../utils/timeUtils';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation';
 
 type GameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Game'>;
-=======
 import LeaveButton from '../components/LeaveButton';
->>>>>>> 62e12f72cd4c88d9ab266a909fce11fa5db136df
 
 export default function GameScreen() {
   const { myLocation, players, currentUser, error, lastTagMessage, checkForTag, gameTimeRemaining, gameStarted } = useLocation();
@@ -140,66 +137,28 @@ export default function GameScreen() {
 
   return (
     <View style={styles.container}>
-      {Platform.OS === 'ios' ? (
-        <MapView
-          key={`map-${mapKey}`}
-          ref={mapRef}
-          style={styles.map}
-          showsUserLocation={false} // Change to false to hide default blue marker
-          initialRegion={mapRegion}
-          onMapReady={() => {
-            console.log("Map is ready");
-            setMapReady(true);
-          }}
-          onError={(error) => {
-            console.error("Map error:", error);
-          }}
-          onRegionChangeComplete={() => {
-            // User has moved the map
-            setUserMovedMap(true);
-          }}
-        >
-          {mapReady && players.filter(player => 
-            player.location && 
-            typeof player.location.latitude === 'number' && 
-            !isNaN(player.location.latitude)
-          ).map(player => (
-            <PlayerMarker
-              key={player.id}
-              player={player}
-              isCurrentUser={currentUser?.id === player.id}
-            />
-          ))}
-        </MapView>
-      ) : (
-        <MapView
-          key={`map-${mapKey}`}
-          ref={mapRef}
-          style={styles.map}
-          showsUserLocation={false} // Change to false to hide default blue marker
-          initialRegion={mapRegion}
-          onMapReady={() => {
-            console.log("Map is ready");
-            setMapReady(true);
-          }}
-          onRegionChangeComplete={() => {
-            // User has moved the map
-            setUserMovedMap(true);
-          }}
-        >
-          {mapReady && players.filter(player => 
-            player.location && 
-            typeof player.location.latitude === 'number' && 
-            !isNaN(player.location.latitude)
-          ).map(player => (
-            <PlayerMarker
-              key={player.id}
-              player={player}
-              isCurrentUser={currentUser?.id === player.id}
-            />
-          ))}
-        </MapView>
-      )}
+      <MapView
+        key={`map-${mapKey}`}
+        ref={mapRef}
+        style={styles.map}
+        showsUserLocation={false}
+        initialRegion={mapRegion}
+        onMapReady={() => {
+          console.log("Map is ready");
+          setMapReady(true);
+        }}
+        onError={(error) => {
+          console.error("Map error:", error);
+          // Try to remount the map if there's an error
+          setMapKey(k => k + 1);
+        }}
+        onRegionChangeComplete={() => {
+          // User has moved the map
+          setUserMovedMap(true);
+        }}
+      >
+        {renderPlayerMarkers()}
+      </MapView>
 
       <GameStatusBar 
         itPlayerName={itPlayer?.username || 'Unknown'} 

@@ -53,18 +53,37 @@ let gameState = {
     return null;
   };
   
-  // Start the game
-  const startGame = () => {
+  // Fix the circular reference issue when starting game
+  const startGame = (settings = { duration: 5 }) => {
     gameState.gameInProgress = true;
     
-    // Make sure at least one player is "it"
-    if (gameState.players.length > 0) {
-      const itIndex = Math.floor(Math.random() * gameState.players.length);
-      gameState.players = gameState.players.map((player, index) => ({
-        ...player,
-        isIt: index === itIndex
-      }));
-    }
+    // Choose a random player to be "it"
+    const randomIndex = Math.floor(Math.random() * gameState.players.length);
+    gameState.players.forEach((player, index) => {
+      player.isIt = index === randomIndex;
+    });
+    
+    // Set game timer
+    const durationInSeconds = settings.duration * 60;
+    console.log(`Setting game timer for ${settings.duration} minutes`);
+    
+    // Fix: Create a safe version of game state for sending
+    const safeGameState = {
+      gameInProgress: gameState.gameInProgress,
+      players: gameState.players.map(p => ({
+        id: p.id,
+        username: p.username,
+        location: p.location,
+        isIt: p.isIt,
+        isHost: p.isHost
+      }))
+    };
+    
+    // Send the safe game state instead of the original
+    io.emit('gameStarted', safeGameState);
+    
+    // Start countdown timer
+    startGameTimer(durationInSeconds);
     
     return gameState;
   };

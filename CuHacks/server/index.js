@@ -174,8 +174,21 @@ io.on('connection', (socket) => {
       }));
     }
     
-    io.emit('gameStarted', gameState);
-    io.emit('updatePlayers', gameState.players);
+    // Create a safe serializable copy of the game state
+    const safeGameState = {
+      gameInProgress: gameState.gameInProgress,
+      players: gameState.players.map(p => ({
+        id: p.id,
+        username: p.username,
+        location: p.location ? { ...p.location } : null,
+        isIt: p.isIt,
+        isHost: p.isHost
+      }))
+    };
+
+    // Send the safe game state instead of the original
+    io.emit('gameStarted', safeGameState);
+    io.emit('updatePlayers', safeGameState.players);
   });
 
   // Handle host transfer request

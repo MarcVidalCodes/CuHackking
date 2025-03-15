@@ -9,6 +9,7 @@ class SocketService {
   private eventHandlers: Record<string, Function[]> = {};
   private previousPlayerCount: number = 0;
   private lastPlayerUpdateLog = 0;
+  private lastUsername: string | null = null;
 
   constructor() {
     this.connect();
@@ -21,11 +22,12 @@ class SocketService {
 
     console.log("SocketService: Connecting to", SOCKET_SERVER_URL);
     this.socket = io(SOCKET_SERVER_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],  // Try websocket only first
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity, // Keep trying forever
       reconnectionDelay: 1000,
-      forceNew: false
+      timeout: 10000,  // Increase timeout
+      forceNew: false,
     });
 
     this.setupListeners();
@@ -35,9 +37,15 @@ class SocketService {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log("SocketService: Connected with ID", this.socket?.id);
+      console.log(`SocketService: Connected with ID ${this.socket?.id}`);
       this.connected = true;
-      this.emitEvent('connect', this.socket?.id);
+      this.emitEvent('connect', null);
+      
+      // Re-join the game if we reconnected
+      if (this.lastUsername) {
+        console.log(`SocketService: Reconnecting as ${this.lastUsername}`);
+        this.joinGame(this.lastUsername);
+      }
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -45,6 +53,17 @@ class SocketService {
       this.connected = false;
       this.emitEvent('disconnect', reason);
       
+      // More aggressive reconnection for transport close errors
+      if (reason === 'transport close') {
+        this.socket?.disconnect();
+        this.socket = null;
+        
+        console.log("SocketService: Transport closed, attempting full reconnect in 2s");
+        setTimeout(() => {
+          this.connect();  // Will create a new socket
+        }, 2000);
+      }
+
       // Auto-reconnect
       if (reason === 'io client disconnect' || reason === 'transport close') {
         setTimeout(() => {
@@ -109,6 +128,7 @@ class SocketService {
   }
 
   joinGame(username: string) {
+    this.lastUsername = username;
     return this.emit('joinGame', { username });
   }
 
