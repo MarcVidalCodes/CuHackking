@@ -440,9 +440,6 @@ export default function GameScreen() {
       {/* Safe zone info and timer */}
       {gameStarted && circleCenter && (
         <View style={styles.circleInfo}>
-          <Text style={styles.circleInfoText}>
-            Safe zone: {Math.round(circleRadius)}m
-          </Text>
           {!isShrinking ? (
             <Text style={styles.timerText}>
               Circle shrinks in: {timerSeconds}s
