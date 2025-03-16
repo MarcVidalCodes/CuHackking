@@ -17,9 +17,16 @@ export class GeminiAIService {
   private useApiCall = true; // Flag to completely disable API calls if too many errors
   
   constructor() {
-    // Use the key from .env file, with a fallback for development
     const apiKey = GEMINI_API_KEY || "";
     
+    // DRAMATICALLY INCREASED SPEEDS (10x faster than before)
+    this.speedMultipliers = {
+      easy: 0.0005,    // 10x faster
+      medium: 0.001,   // 10x faster
+      hard: 0.002      // 10x faster
+    };
+    
+    // Rest of constructor stays the same
     if (!apiKey) {
       console.warn("No Gemini API key provided. AI functionality will be limited.");
       this.useApiCall = false;

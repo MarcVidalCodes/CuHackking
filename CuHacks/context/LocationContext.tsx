@@ -304,6 +304,63 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     };
   }, []);
 
+  // Add AI-to-AI tag checking
+  useEffect(() => {
+    // Only run in single player mode when game is started
+    if (!singlePlayerMode || !gameStarted) return;
+    
+    console.log("Starting AI tag checking");
+    
+    // Set up interval to check for AI-to-AI tags
+    const aiTagInterval = setInterval(() => {
+      // Find the "it" AI player
+      const itAi = players.find(p => p.isIt && p.isAI);
+      if (!itAi) return;
+      
+      console.log(`Checking if ${itAi.username} (IT) can tag anyone...`);
+      
+      // Check if this AI can tag any other player (including human)
+      const tagRadius = 20; // meters
+      let taggedPlayer = null;
+      
+      // Find potential tags
+      for (const target of players) {
+        // Skip the "it" player itself
+        if (target.id === itAi.id) continue;
+        
+        // Calculate distance
+        const distance = getDistanceBetweenCoordinates(
+          itAi.location,
+          target.location
+        );
+        
+        // If within tag radius, this player gets tagged
+        if (distance <= tagRadius) {
+          console.log(`${itAi.username} tagged ${target.username}! (${Math.round(distance)}m)`);
+          taggedPlayer = target;
+          break;
+        }
+      }
+      
+      // If a tag was made, update all players
+      if (taggedPlayer) {
+        // Show tag message
+        setLastTagMessage(`${itAi.username} tagged ${taggedPlayer.username}!`);
+        setTimeout(() => setLastTagMessage(null), 3000);
+        
+        // Update all players - only the tagged player is "it" now
+        setPlayers(prevPlayers => 
+          prevPlayers.map(p => ({
+            ...p,
+            isIt: p.id === taggedPlayer.id
+          }))
+        );
+      }
+    }, 1000); // Check every second
+    
+    return () => clearInterval(aiTagInterval);
+  }, [singlePlayerMode, gameStarted, players]);
+
   const joinGame = (username: string) => {
     const socketId = socketService.getSocketId();
     if (!socketId) {
@@ -466,12 +523,12 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
       const newCurrentUser = { id: userId, username, isHost: true };
       setCurrentUser(newCurrentUser);
       
-      // Create player object with location
+      // Create player object with location - NOT "it" anymore
       const userPlayer: Player = {
         id: userId,
         username,
         location: initialLocation,
-        isIt: true, // Player starts as "it"
+        isIt: false, // CHANGED: Player is NOT "it" to start
         isHost: true
       };
       
@@ -480,6 +537,13 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
       
       // Generate AI players around the player
       const aiPlayers = aiPlayerManager.generateAIPlayers(aiCount, initialLocation, difficulty);
+      
+      // Make one random AI player "it" at the start
+      if (aiPlayers.length > 0) {
+        const randomIndex = Math.floor(Math.random() * aiPlayers.length);
+        aiPlayers[randomIndex].isIt = true;
+        console.log(`Game starting with ${aiPlayers[randomIndex].username} as IT`);
+      }
       
       // Combine user and AI players
       const allPlayers = [userPlayer, ...aiPlayers];
