@@ -67,13 +67,12 @@ export default function LobbyScreen() {
       style={styles.container}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>TAG GAME</Text>
-        <Text style={styles.subtitle}>Ready to play?</Text>
-
+        <Text style={styles.title}>TAG ROYALE</Text>
+        
         <TextInput
           style={styles.input}
           placeholder="Enter your username"
-          placeholderTextColor="#rgba(255,255,255,0.7)"
+          placeholderTextColor="rgba(255,255,255,0.7)"
           value={username}
           onChangeText={setUsername}
         />
@@ -81,16 +80,25 @@ export default function LobbyScreen() {
         {!hasJoined ? (
           <>
             <TouchableOpacity 
-              style={styles.button}
+              style={[
+                styles.button,
+                !username.trim() && styles.buttonDisabled
+              ]}
               onPress={handleJoinGame}
+              disabled={!username.trim()}
             >
               <MaterialIcons name="groups" size={24} color="white" />
               <Text style={styles.buttonText}>Multiplayer</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[styles.button, styles.singlePlayerButton]}
+              style={[
+                styles.button,
+                styles.singlePlayerButton,
+                !username.trim() && styles.buttonDisabled
+              ]}
               onPress={handleSinglePlayer}
+              disabled={!username.trim()}
             >
               <MaterialIcons name="person" size={24} color="white" />
               <Text style={styles.buttonText}>Single Player</Text>
@@ -181,5 +189,9 @@ const styles = StyleSheet.create({
   singlePlayerButton: {
     backgroundColor: 'rgba(76, 175, 80, 0.6)', // Green tint
     marginTop: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    opacity: 0.5,
   },
 });
