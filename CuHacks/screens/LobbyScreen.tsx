@@ -91,18 +91,7 @@ export default function LobbyScreen() {
               <Text style={styles.buttonText}>Multiplayer</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[
-                styles.button,
-                styles.singlePlayerButton,
-                !username.trim() && styles.buttonDisabled
-              ]}
-              onPress={handleSinglePlayer}
-              disabled={!username.trim()}
-            >
-              <MaterialIcons name="person" size={24} color="white" />
-              <Text style={styles.buttonText}>Single Player</Text>
-            </TouchableOpacity>
+            
           </>
         ) : (
           <View style={styles.gameControls}>
