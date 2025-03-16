@@ -41,6 +41,11 @@ interface CurrentUser {
 
 interface GameSettings {
   duration: number; // in minutes
+  initialCircleSize?: number; // in meters
+  circleShrinkPercent?: number; // percentage to shrink by
+  shrinkDuration?: number; // in seconds
+  shrinkInterval?: number; // in seconds
+  // Add other game settings as needed
 }
 
 interface LocationContextType {
@@ -73,7 +78,13 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [lastTagMessage, setLastTagMessage] = useState<string | null>(null);
-  const [gameSettings, setGameSettings] = useState<GameSettings>({ duration: 5 });
+  const [gameSettings, setGameSettings] = useState<GameSettings>({ 
+    duration: 5,
+    initialCircleSize: 100,
+    circleShrinkPercent: 30,
+    shrinkDuration: 30,
+    shrinkInterval: 10
+  });
   const [gameTimeRemaining, setGameTimeRemaining] = useState<number | null>(null);
   const [singlePlayerMode, setSinglePlayerMode] = useState(false);
   const [aiUpdateInterval, setAiUpdateInterval] = useState<NodeJS.Timeout | null>(null);
@@ -378,26 +389,62 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     socketService.joinGame(username);
   };
 
-  const startGame = (settings?: GameSettings) => {
-    if (!isHost) {
-      setError("Only the host can start the game");
-      return;
+const startGame = (settings?: Partial<GameSettings>) => {
+  if (!isHost) {
+    setError("Only the host can start the game");
+    return;
+  }
+  
+  console.log("🎮 Starting game with settings input:", JSON.stringify(settings || 'using current settings'));
+  
+  // Save a copy of the current settings
+  let finalSettings = { ...gameSettings };
+  
+  // If specific settings were provided, apply them on top
+  if (settings) {
+    // Process each field individually to ensure they're numbers
+    if (settings.duration !== undefined) {
+      const duration = Number(settings.duration);
+      finalSettings.duration = !isNaN(duration) ? duration : 5;
     }
     
-    // Update settings if provided
-    if (settings) {
-      console.log("Updating game settings:", settings);
-      setGameSettings(prev => ({ ...prev, ...settings }));
+    if (settings.initialCircleSize !== undefined) {
+      const size = Number(settings.initialCircleSize);
+      finalSettings.initialCircleSize = !isNaN(size) ? size : 100;
     }
     
-    console.log("Starting game as host with settings:", settings || gameSettings);
-    socketService.emit('startGame', settings || gameSettings);
+    if (settings.circleShrinkPercent !== undefined) {
+      const percent = Number(settings.circleShrinkPercent);
+      finalSettings.circleShrinkPercent = !isNaN(percent) ? percent : 30;
+    }
     
-    // Delay setting gameStarted to allow server events to arrive
-    setTimeout(() => {
-      setGameStarted(true);
-    }, 500);
-  };
+    if (settings.shrinkDuration !== undefined) {
+      const duration = Number(settings.shrinkDuration);
+      finalSettings.shrinkDuration = !isNaN(duration) ? duration : 30;
+    }
+    
+    if (settings.shrinkInterval !== undefined) {
+      const interval = Number(settings.shrinkInterval);
+      finalSettings.shrinkInterval = !isNaN(interval) ? interval : 10;
+    }
+  }
+  
+  // Log the final settings being used
+  console.log("🎮 FINAL GAME SETTINGS:", JSON.stringify(finalSettings));
+  
+  // Make sure we update the state with the final settings
+  setGameSettings(finalSettings);
+  
+  // Send to server
+  socketService.emit('startGame', finalSettings);
+  
+  // Delay setting gameStarted to allow settings to propagate
+  setTimeout(() => {
+    // Check once more that settings are applied
+    console.log("🎮 Game starting now, settings:", JSON.stringify(gameSettings));
+    setGameStarted(true);
+  }, 500);
+};
 
   const updateLocation = (location: Coordinates) => {
     socketService.updateLocation(location);
@@ -507,11 +554,39 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     return R * c; // Distance in meters
   };
 
-  const updateGameSettings = (settings: GameSettings) => {
-    setGameSettings(prev => ({ ...prev, ...settings }));
-    // Notify server about settings update
-    socketService.emit('updateGameSettings', settings);
-  };
+const updateGameSettings = (settings: Partial<GameSettings>) => {
+  // Validate and log the incoming settings
+  console.log("🔄 UPDATING GAME SETTINGS:", JSON.stringify(settings));
+  
+  // Process settings into numbers more carefully
+  const processedSettings: Partial<GameSettings> = {};
+  
+  if (settings.initialCircleSize !== undefined) {
+    // Ensure it's a valid number and not too small
+    const rawSize = Number(settings.initialCircleSize);
+    const size = !isNaN(rawSize) ? Math.max(50, rawSize) : 100; 
+    processedSettings.initialCircleSize = size;
+    console.log(`🔵 Circle size processed: ${settings.initialCircleSize} → ${size}`);
+  }
+  
+  // Process other settings similarly
+  // ...existing code for other settings...
+  
+  // Create a new settings object by spreading the current settings first,
+  // then applying the processed settings on top
+  const newSettings = { ...gameSettings, ...processedSettings };
+  
+  // Log the final settings that will be applied
+  console.log("✅ FINAL SETTINGS:", JSON.stringify(newSettings));
+  
+  // Update the state with the new settings - use a direct setState instead of callback
+  setGameSettings(newSettings);
+  
+  // Also notify server about settings update
+  socketService.emit('updateGameSettings', newSettings);
+  
+  return newSettings;
+};
 
   const startSinglePlayerGame = async (username: string, aiCount: number, difficulty: string, duration: number) => {
     try {

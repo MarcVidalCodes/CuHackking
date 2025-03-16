@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import MapView, { Marker, Region, Circle, Polyline } from 'react-native-maps';
 import { useLocation } from '../context/LocationContext';
 import PlayerMarker from '../components/PlayerMarker';
@@ -9,17 +9,35 @@ import { formatTime } from '../utils/timeUtils';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation';
+import LeaveButton from '../components/LeaveButton';
 
 type GameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Game'>;
-import LeaveButton from '../components/LeaveButton';
 
 export default function GameScreen() {
   const { myLocation, players, currentUser, error, lastTagMessage, checkForTag, gameTimeRemaining, gameStarted, gameSettings } = useLocation();
+  
+  // Log and create a non-null version of gameSettings with defaults
+  const safeGameSettings = gameSettings || {
+    duration: 5,
+    initialCircleSize: 100,
+    circleShrinkPercent: 30,
+    shrinkDuration: 30,
+    shrinkInterval: 10
+  };
+  
+  // Create a stable circle size value derived from safe settings
+  const [stableCircleSize, setStableCircleSize] = useState(() => {
+    // Ensure we have a valid number even if settings are undefined
+    const size = safeGameSettings.initialCircleSize;
+    console.log("⭕ Initial circle size:", size);
+    return size;
+  });
+  
   const navigation = useNavigation<GameScreenNavigationProp>();
   const mapRef = useRef<MapView | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [mapKey, setMapKey] = useState(1); // Add a key to force remount if needed
-  const [userMovedMap, setUserMovedMap] = useState(false); // Add this state to track if user has manually moved the map
+  const [mapKey, setMapKey] = useState(1); 
+  const [userMovedMap, setUserMovedMap] = useState(false);
   
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: myLocation?.latitude || 37.78825,
@@ -28,22 +46,30 @@ export default function GameScreen() {
     longitudeDelta: 0.01,
   });
 
-  // Circle state variables
+  // Circle state variables - directly use gameSettings.initialCircleSize for initialization
   const [circleCenter, setCircleCenter] = useState<Coordinates | null>(null);
-  const [circleRadius, setCircleRadius] = useState(gameSettings?.initialCircleSize || 100); // Use the initialCircleSize from settings
+  const [circleRadius, setCircleRadius] = useState(() => {
+    const initialSize = gameSettings?.initialCircleSize;
+    console.log("INITIAL CIRCLE SIZE FROM SETTINGS:", initialSize || 100);
+    return initialSize || 100;
+  });
   const [isShrinking, setIsShrinking] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(10);
   const [futureCircle, setFutureCircle] = useState<{center: Coordinates, radius: number} | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shrinkAnimationRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Add useEffect to update circle radius when gameSettings changes
+  // Add timer phase state - "waiting", "warning", or "shrinking"
+  const [timerPhase, setTimerPhase] = useState<"waiting" | "warning" | "shrinking">("waiting");
+
+  // Add a stronger effect to update circle radius when gameSettings change
   useEffect(() => {
+    // Check specifically for initialCircleSize changes
     if (gameSettings?.initialCircleSize) {
-      console.log("Updating circle radius to:", gameSettings.initialCircleSize);
+      console.log("⚠️ IMPORTANT: Game settings changed circle size to:", gameSettings.initialCircleSize);
       setCircleRadius(gameSettings.initialCircleSize);
     }
-  }, [gameSettings]);
+  }, [gameSettings?.initialCircleSize]); // Only depend on this specific property
 
   // Effect to set initial circle center based on player locations when game starts
   useEffect(() => {
@@ -53,41 +79,31 @@ export default function GameScreen() {
     }
   }, [gameStarted, myLocation]);
 
+  // Effect to set initial circle center and radius when game starts
+  useEffect(() => {
+    if (gameStarted && players.length > 0 && myLocation) {
+      // Set the circle center to your location
+      setCircleCenter(myLocation);
+      
+      // Explicitly set the circle radius from game settings when game starts
+      if (gameSettings && gameSettings.initialCircleSize) {
+        console.log("Game started - setting initial circle radius to:", gameSettings.initialCircleSize);
+        setCircleRadius(gameSettings.initialCircleSize);
+      }
+    }
+  }, [gameStarted, myLocation, players, gameSettings]);
+
   // Update map region when your location changes
   useEffect(() => {
-    // Only update the map region if:
-    // 1. We have a location AND
-    // 2. Either it's the first time loading OR user hasn't manually moved the map
     if (myLocation && myLocation.latitude && myLocation.longitude && !userMovedMap) {
-      const newRegion = {
-        latitude: myLocation.latitude,
-        longitude: myLocation.longitude,
-        latitudeDelta: mapRegion.latitudeDelta, // Preserve current zoom
-        longitudeDelta: mapRegion.longitudeDelta, // Preserve current zoom
-      };
-      
-      // Update map without animation to avoid jumps
       mapRef.current?.setCamera({
         center: {
           latitude: myLocation.latitude,
           longitude: myLocation.longitude,
         },
-        // Don't change the zoom level
       });
     }
   }, [myLocation, userMovedMap]);
-
-  // Handle map errors by remounting
-  useEffect(() => {
-    const mapErrorTimeout = setTimeout(() => {
-      if (!mapReady) {
-        console.log("Map failed to load, remounting...");
-        setMapKey(prev => prev + 1);
-      }
-    }, 5000);
-
-    return () => clearTimeout(mapErrorTimeout);
-  }, [mapReady]);
 
   // Effect to handle game end navigation
   useEffect(() => {
@@ -96,11 +112,6 @@ export default function GameScreen() {
       navigation.replace('Lobby');
     }
   }, [gameStarted, navigation]);
-
-  // Add console log to debug
-  useEffect(() => {
-    console.log("Current time remaining:", gameTimeRemaining);
-  }, [gameTimeRemaining]);
 
   // Find the player who is "it"
   const itPlayer = players.find(player => player.isIt);
@@ -124,7 +135,6 @@ export default function GameScreen() {
   const renderPlayerMarkers = () => {
     if (!mapReady) return null;
     
-    // Only render markers for players with valid coordinates
     return players.filter(player => 
       player.location && 
       typeof player.location.latitude === 'number' && 
@@ -139,9 +149,6 @@ export default function GameScreen() {
       />
     ));
   };
-
-  // Format time for display
-  const formattedTime = gameTimeRemaining !== null ? formatTime(gameTimeRemaining) : '--:--';
 
   // Calculate a new position to ensure new circle stays fully within the old one
   const calculateNewCenter = useCallback((center: Coordinates, currentRadius: number, newRadius: number) => {
@@ -169,41 +176,15 @@ export default function GameScreen() {
     };
   }, []);
 
-  // Calculate the nearest point on a circle from a given point
-  const calculateNearestCirclePoint = useCallback((circleCenter: Coordinates, radius: number, point: Coordinates) => {
-    // Calculate direction vector from circle center to point
-    const dx = point.longitude - circleCenter.longitude;
-    const dy = point.latitude - circleCenter.latitude;
-    
-    // Calculate distance (Euclidean for simplicity, not perfect for geo)
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // If point is inside circle, we'll just use the point itself
-    if (distance * 111000 < radius) { // Convert approx to meters
-      return point;
-    }
-    
-    // Normalize the direction vector
-    const normX = dx / distance;
-    const normY = dy / distance;
-    
-    // Calculate the point on the circle (radius converted to approx degrees)
-    const radiusInDegrees = radius / 111000; // Approximate conversion
-    
-    return {
-      longitude: circleCenter.longitude + normX * radiusInDegrees,
-      latitude: circleCenter.latitude + normY * radiusInDegrees
-    };
-  }, []);
-
-  // Function to shrink the circle
+  // Function to shrink the circle - make sure this works properly
   const shrinkCircle = useCallback(() => {
     if (!circleCenter || isShrinking) return;
     
-    // Calculate new radius based on shrink percentage (default to 80% if not set)
+    console.log("STARTING CIRCLE SHRINK ANIMATION");
+    
+    // Calculate new radius based on shrink percentage (default to 30% if not set)
     const shrinkPercent = gameSettings?.circleShrinkPercent || 30;
     const startRadius = circleRadius;
-    // Changed formula: New radius should be (100% - shrinkPercent%) of original
     const endRadius = Math.max(50, startRadius * (1 - shrinkPercent / 100));
     
     // Use the pre-calculated future circle if available
@@ -251,46 +232,75 @@ export default function GameScreen() {
         setCircleRadius(endRadius);
         setCircleCenter(newCenter);
         setIsShrinking(false);
-        // Reset the timer when shrinking is complete
-        setTimerSeconds(10);
+        console.log("CIRCLE SHRINK COMPLETE. New radius:", endRadius);
+        
+        // Reset to waiting phase after shrinking completes
+        const intervalSeconds = gameSettings?.shrinkInterval || 10;
+        const warningSeconds = Math.min(5, Math.floor(intervalSeconds / 2));
+        setTimerSeconds(intervalSeconds - warningSeconds);
+        setTimerPhase("waiting");
       }
     }, 50);
   }, [circleCenter, circleRadius, isShrinking, calculateNewCenter, futureCircle, gameSettings]);
 
-  // Set up the timer for circle shrinking
+  // Set up the timer for circle shrinking - fix this to properly transition between phases
   useEffect(() => {
-    if (!gameStarted) return;
+    if (!gameStarted || !circleCenter) return;
     
     // Clear any existing timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
     }
     
     // Use the configured shrink interval or fall back to 10 seconds
     const intervalSeconds = gameSettings?.shrinkInterval || 10;
+    // Warning phase is 5 seconds before shrinking
+    const warningSeconds = 5;
     
-    // Start with the full interval time
-    setTimerSeconds(intervalSeconds);
+    // Initial setup based on current phase
+    if (timerPhase === "waiting") {
+      // First phase: waiting to show the future circle
+      setTimerSeconds(intervalSeconds - warningSeconds);
+      console.log(`Starting "waiting" phase: ${intervalSeconds - warningSeconds}s`);
+    } else if (timerPhase === "warning") {
+      // Second phase: showing the future circle, counting down to shrink
+      setTimerSeconds(warningSeconds);
+      console.log(`Starting "warning" phase: ${warningSeconds}s`);
+    }
     
-    // Create a new timer that counts down from the configured interval to 0
+    // Create the countdown timer
     timerIntervalRef.current = setInterval(() => {
       setTimerSeconds(prev => {
-        // When timer hits 5, calculate and show the future circle
-        if (prev === 5 && !futureCircle && circleCenter) {
-          const shrinkPercent = gameSettings?.circleShrinkPercent || 30;
-          const newRadius = Math.max(50, circleRadius * (1 - shrinkPercent / 100));
-          const newCenter = calculateNewCenter(circleCenter, circleRadius, newRadius);
-          setFutureCircle({
-            center: newCenter,
-            radius: newRadius
-          });
-        }
-        
+        // When timer reaches zero
         if (prev <= 1) {
-          // When timer reaches 0, start shrinking process
-          shrinkCircle();
-          // Reset timer to the full interval for the next cycle
-          return intervalSeconds;
+          if (timerPhase === "waiting") {
+            // Transition from waiting to warning phase
+            console.log("Timer reached 0 - Transitioning to warning phase");
+            // Calculate and show future circle
+            if (circleCenter) {
+              const shrinkPercent = gameSettings?.circleShrinkPercent || 30;
+              const newRadius = Math.max(50, circleRadius * (1 - shrinkPercent / 100));
+              const newCenter = calculateNewCenter(circleCenter, circleRadius, newRadius);
+              setFutureCircle({
+                center: newCenter,
+                radius: newRadius
+              });
+              console.log("Future circle calculated:", newCenter, newRadius);
+            }
+            // Switch to warning phase
+            setTimerPhase("warning");
+            return warningSeconds; // Reset timer to warning duration
+          }
+          else if (timerPhase === "warning") {
+            // Transition from warning to shrinking phase
+            console.log("Warning timer reached 0 - Starting circle shrink");
+            setTimerPhase("shrinking");
+            // Start the shrinking process
+            shrinkCircle();
+            return 0;
+          }
+          return 0;
         }
         return prev - 1;
       });
@@ -302,7 +312,7 @@ export default function GameScreen() {
         timerIntervalRef.current = null;
       }
     };
-  }, [gameStarted, shrinkCircle, circleCenter, circleRadius, futureCircle, calculateNewCenter, gameSettings]);
+  }, [gameStarted, timerPhase, circleCenter, circleRadius, calculateNewCenter, gameSettings, shrinkCircle]);
 
   // Clean up animation when component unmounts
   useEffect(() => {
@@ -314,23 +324,40 @@ export default function GameScreen() {
     };
   }, []);
 
-  // Calculate the path to the future circle (if it exists)
-  const getPathToFutureCircle = useCallback(() => {
-    if (!myLocation || !futureCircle) return null;
-    
-    // Calculate nearest point on future circle
-    const nearestPoint = calculateNearestCirclePoint(
-      futureCircle.center, 
-      futureCircle.radius, 
-      myLocation
-    );
-    
-    // Return the path coordinates
-    return [
-      { latitude: myLocation.latitude, longitude: myLocation.longitude },
-      { latitude: nearestPoint.latitude, longitude: nearestPoint.longitude }
-    ];
-  }, [myLocation, futureCircle, calculateNearestCirclePoint]);
+  // Use this flag to track if we've properly applied settings
+  const settingsApplied = useRef(false);
+
+  // Force update when gameSettings changes
+  const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Log whenever game settings change
+  useEffect(() => {
+    console.log("⚠️ GAME SETTINGS CHANGED:", gameSettings);
+    // Force Circle component to remount
+    setForceUpdate(prev => prev + 1);
+    settingsApplied.current = true;
+  }, [gameSettings]);
+
+  // Add this debug useEffect to track all relevant state changes
+  useEffect(() => {
+    if (gameSettings) {
+      console.log("⚠️ Game settings updated in GameScreen:", 
+                  JSON.stringify({
+                    initialCircleSize: gameSettings.initialCircleSize,
+                    duration: gameSettings.duration
+                  }));
+    }
+  }, [gameSettings]);
+
+  // Always update the stable circle size when settings change
+  useEffect(() => {
+    if (gameSettings && typeof gameSettings.initialCircleSize === 'number') {
+      const newSize = gameSettings.initialCircleSize;
+      console.log("⭕ Updating circle size to:", newSize);
+      setStableCircleSize(newSize);
+      setCircleRadius(newSize);
+    }
+  }, [gameSettings]);
 
   if (error) {
     return (
@@ -357,28 +384,20 @@ export default function GameScreen() {
         style={styles.map}
         showsUserLocation={false}
         initialRegion={mapRegion}
-        onMapReady={() => {
-          console.log("Map is ready");
-          setMapReady(true);
-        }}
-        onError={(error) => {
-          console.error("Map error:", error);
-          setMapKey(k => k + 1);
-        }}
-        onRegionChangeComplete={() => {
-          setUserMovedMap(true);
-        }}
+        onMapReady={() => setMapReady(true)}
+        onRegionChangeComplete={() => setUserMovedMap(true)}
       >
         {renderPlayerMarkers()}
         
-        {/* Current circle */}
+        {/* FIXED Circle component with stable circle size and safety fallback */}
         {circleCenter && (
           <Circle
+            key={`circle-${stableCircleSize}-${forceUpdate}`}
             center={{
               latitude: circleCenter.latitude,
               longitude: circleCenter.longitude,
             }}
-            radius={circleRadius}
+            radius={stableCircleSize || 100} // Added fallback for extra safety
             strokeWidth={3}
             strokeColor="rgba(255, 0, 0, 0.8)"
             fillColor="rgba(255, 0, 0, 0.1)"
@@ -396,18 +415,6 @@ export default function GameScreen() {
             strokeWidth={2}
             strokeColor="rgba(255, 255, 0, 0.8)"
             fillColor="rgba(255, 255, 0, 0.05)"
-            // Dashed line effect (not supported in all versions)
-            // Use lineDashPattern if available in your version
-          />
-        )}
-        
-        {/* Dotted line path to future circle */}
-        {futureCircle && myLocation && (
-          <Polyline
-            coordinates={getPathToFutureCircle() || []}
-            strokeColor="rgba(255, 255, 0, 0.8)"
-            strokeWidth={2}
-            lineDashPattern={[5, 5]} // Dotted line pattern
           />
         )}
       </MapView>
@@ -426,7 +433,6 @@ export default function GameScreen() {
       
       <LeaveButton />
       
-      
       {lastTagMessage && (
         <View style={styles.tagMessage}>
           <Text style={styles.tagMessageText}>{lastTagMessage}</Text>
@@ -437,13 +443,16 @@ export default function GameScreen() {
         <Text style={styles.recenterButtonText}>📍</Text>
       </TouchableOpacity>
 
-      {/* Safe zone info and timer */}
+      {/* Safe zone info and timer - ensure this shows the right phase */}
       {gameStarted && circleCenter && (
         <View style={styles.circleInfo}>
-          {!isShrinking ? (
+          {timerPhase === "waiting" ? (
             <Text style={styles.timerText}>
-              Circle shrinks in: {timerSeconds}s
-              {futureCircle && " (New zone visible)"}
+              Next Circle shown in: {timerSeconds}s
+            </Text>
+          ) : timerPhase === "warning" ? (
+            <Text style={styles.warningText}>
+              Shrinking in: {timerSeconds}s
             </Text>
           ) : (
             <Text style={styles.shrinkingText}>Circle shrinking...</Text>
@@ -461,23 +470,6 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  playersBox: {
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 10,
-    borderRadius: 10,
-    minWidth: 150,
-  },
-  safeZoneBox: {
-    position: 'absolute',
-    top: 150, // Position below players box
-    right: 50,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 10,
-    borderRadius: 10,
-    minWidth: 150,
-  },
   errorText: {
     fontSize: 18,
     color: 'red',
@@ -487,19 +479,6 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-  },
-  gameInfo: {
-    position: 'absolute',
-    top: 10,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    padding: 10,
-    alignItems: 'center',
-  },
-  infoText: {
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   recenterButton: {
     position: 'absolute',
@@ -520,25 +499,6 @@ const styles = StyleSheet.create({
   recenterButtonText: {
     fontSize: 24,
   },
-  tagButton: {
-    position: 'absolute',
-    bottom: 90,
-    right: 10,
-    backgroundColor: '#FF0000',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  tagButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
   tagMessage: {
     position: 'absolute',
     bottom: 150,
@@ -558,15 +518,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 90,
     left: 10,
-    top: 700,
     backgroundColor: 'rgba(0,0,0,0.7)',
     padding: 10,
     borderRadius: 8,
-  },
-  circleInfoText: {
-    color: 'white',
-    fontSize: 14,
-    marginBottom: 5,
   },
   timerText: {
     color: '#FFC107',  // Amber color for the timer
@@ -577,5 +531,22 @@ const styles = StyleSheet.create({
     color: '#FF5252',  // Red color for the shrinking warning
     fontSize: 14,
     fontWeight: 'bold',
-  }
+  },
+  warningText: {
+    color: '#FFA500', // Orange color for warning phase
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  debugRadiusInfo: {
+    position: 'absolute',
+    top: 150,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 5,
+    borderRadius: 5,
+  },
+  debugRadiusText: {
+    color: 'white',
+    fontSize: 10,
+  },
 });

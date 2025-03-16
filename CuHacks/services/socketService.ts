@@ -1,7 +1,8 @@
 import io, { Socket } from 'socket.io-client';
 import { Coordinates, GameState, Player } from '../types';
 
-const SOCKET_SERVER_URL = 'http://172.17.67.197:3000';
+//const SOCKET_SERVER_URL = 'http://172.17.67.197:3000';
+const SOCKET_SERVER_URL = 'http://10.0.0.89:3000';
 
 class SocketService {
   private socket: Socket | null = null;

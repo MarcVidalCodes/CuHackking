@@ -13,21 +13,36 @@ type WaitingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Wait
 export default function WaitingScreen() {
   const navigation = useNavigation<WaitingScreenNavigationProp>();
   const [showSettings, setShowSettings] = useState(false);
-  const [gameDuration, setGameDuration] = useState(5);
-  const [initialCircleSize, setInitialCircleSize] = useState(100);
-  const [circleShrinkPercent, setCircleShrinkPercent] = useState(30); // Changed default from 80 to 30
-  const [shrinkDuration, setShrinkDuration] = useState(30);
-  const [shrinkInterval, setShrinkInterval] = useState(10); // Add new state for shrink interval
-  const [showTransferModal, setShowTransferModal] = useState(false); // Add new state for transfer modal
+  const [showTransferModal, setShowTransferModal] = useState(false); // Add this missing state variable
+  
   const { 
     players, 
     isHost, 
     startGame, 
     updateGameSettings, 
     gameStarted, 
-    currentUser, // Add currentUser from context
+    currentUser,
+    gameSettings, // Add this to access current game settings
     setPlayers // Add setPlayers from context
   } = useLocation();
+
+  // Initialize setting states from gameSettings
+  const [gameDuration, setGameDuration] = useState(gameSettings?.duration || 5);
+  const [initialCircleSize, setInitialCircleSize] = useState(gameSettings?.initialCircleSize || 100);
+  const [circleShrinkPercent, setCircleShrinkPercent] = useState(gameSettings?.circleShrinkPercent || 30);
+  const [shrinkDuration, setShrinkDuration] = useState(gameSettings?.shrinkDuration || 30);
+  const [shrinkInterval, setShrinkInterval] = useState(gameSettings?.shrinkInterval || 10);
+
+  // Update local state when gameSettings change
+  useEffect(() => {
+    if (gameSettings) {
+      if (gameSettings.duration) setGameDuration(gameSettings.duration);
+      if (gameSettings.initialCircleSize) setInitialCircleSize(gameSettings.initialCircleSize);
+      if (gameSettings.circleShrinkPercent) setCircleShrinkPercent(gameSettings.circleShrinkPercent);
+      if (gameSettings.shrinkDuration) setShrinkDuration(gameSettings.shrinkDuration);
+      if (gameSettings.shrinkInterval) setShrinkInterval(gameSettings.shrinkInterval);
+    }
+  }, [gameSettings]);
 
   useEffect(() => {
     if (gameStarted) {
@@ -44,15 +59,25 @@ export default function WaitingScreen() {
   );
 
   const handleStartGame = async () => {
-    updateGameSettings({ 
+    // Apply ALL current settings before starting the game
+    const currentSettings = {
       duration: gameDuration,
       initialCircleSize: initialCircleSize,
-      circleShrinkPercent: circleShrinkPercent, // Include new settings
+      circleShrinkPercent: circleShrinkPercent,
       shrinkDuration: shrinkDuration,
-      shrinkInterval: shrinkInterval // Include new setting
-    });
-    await startGame();
-    navigation.replace('Loading'); // Navigate to loading instead of game
+      shrinkInterval: shrinkInterval
+    };
+    
+    console.log("🎲 Starting game with settings:", currentSettings);
+    
+    // First update settings explicitly
+    updateGameSettings(currentSettings);
+    
+    // Then start game with the same settings for redundancy
+    await startGame(currentSettings);
+    
+    // Navigate to loading screen
+    navigation.replace('Loading');
   };
 
   const handleTransferHost = (newHostId: string) => {
@@ -75,6 +100,36 @@ export default function WaitingScreen() {
       setShowTransferModal(false);
       Alert.alert('Host Transferred', 'Host abilities have been transferred successfully');
     }
+  };
+
+  // Function to save settings when they change
+  const handleSettingsChange = (setting, value) => {
+    switch(setting) {
+      case 'duration':
+        setGameDuration(value);
+        break;
+      case 'initialCircleSize':
+        setInitialCircleSize(value);
+        break;
+      case 'circleShrinkPercent':
+        setCircleShrinkPercent(value);
+        break;
+      case 'shrinkDuration':
+        setShrinkDuration(value);
+        break;
+      case 'shrinkInterval':
+        setShrinkInterval(value);
+        break;
+    }
+    
+    // Update context immediately
+    updateGameSettings({
+      duration: setting === 'duration' ? value : gameDuration,
+      initialCircleSize: setting === 'initialCircleSize' ? value : initialCircleSize,
+      circleShrinkPercent: setting === 'circleShrinkPercent' ? value : circleShrinkPercent,
+      shrinkDuration: setting === 'shrinkDuration' ? value : shrinkDuration,
+      shrinkInterval: setting === 'shrinkInterval' ? value : shrinkInterval
+    });
   };
 
   return (
@@ -136,14 +191,14 @@ export default function WaitingScreen() {
               <View style={styles.settingControls}>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setGameDuration(Math.max(1, gameDuration - 1))}
+                  onPress={() => handleSettingsChange('duration', Math.max(1, gameDuration - 1))}
                 >
                   <MaterialIcons name="remove" size={20} color="white" />
                 </TouchableOpacity>
                 <Text style={styles.durationText}>{gameDuration}</Text>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setGameDuration(gameDuration + 1)}
+                  onPress={() => handleSettingsChange('duration', gameDuration + 1)}
                 >
                   <MaterialIcons name="add" size={20} color="white" />
                 </TouchableOpacity>
@@ -155,14 +210,14 @@ export default function WaitingScreen() {
               <View style={styles.settingControls}>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setInitialCircleSize(Math.max(50, initialCircleSize - 10))}
+                  onPress={() => handleSettingsChange('initialCircleSize', Math.max(50, initialCircleSize - 10))}
                 >
                   <MaterialIcons name="remove" size={20} color="white" />
                 </TouchableOpacity>
                 <Text style={styles.durationText}>{initialCircleSize}</Text>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setInitialCircleSize(initialCircleSize + 10)}
+                  onPress={() => handleSettingsChange('initialCircleSize', initialCircleSize + 10)}
                 >
                   <MaterialIcons name="add" size={20} color="white" />
                 </TouchableOpacity>
@@ -174,14 +229,14 @@ export default function WaitingScreen() {
               <View style={styles.settingControls}>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setCircleShrinkPercent(Math.max(10, circleShrinkPercent - 5))}
+                  onPress={() => handleSettingsChange('circleShrinkPercent', Math.max(10, circleShrinkPercent - 5))}
                 >
                   <MaterialIcons name="remove" size={20} color="white" />
                 </TouchableOpacity>
                 <Text style={styles.durationText}>{circleShrinkPercent}</Text>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setCircleShrinkPercent(Math.min(50, circleShrinkPercent + 5))}
+                  onPress={() => handleSettingsChange('circleShrinkPercent', Math.min(50, circleShrinkPercent + 5))}
                 >
                   <MaterialIcons name="add" size={20} color="white" />
                 </TouchableOpacity>
@@ -193,14 +248,14 @@ export default function WaitingScreen() {
               <View style={styles.settingControls}>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setShrinkDuration(Math.max(1, shrinkDuration - 1))}
+                  onPress={() => handleSettingsChange('shrinkDuration', Math.max(1, shrinkDuration - 1))}
                 >
                   <MaterialIcons name="remove" size={20} color="white" />
                 </TouchableOpacity>
                 <Text style={styles.durationText}>{shrinkDuration}</Text>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setShrinkDuration(shrinkDuration + 1)}
+                  onPress={() => handleSettingsChange('shrinkDuration', shrinkDuration + 1)}
                 >
                   <MaterialIcons name="add" size={20} color="white" />
                 </TouchableOpacity>
@@ -212,14 +267,14 @@ export default function WaitingScreen() {
               <View style={styles.settingControls}>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setShrinkInterval(Math.max(5, shrinkInterval - 1))}
+                  onPress={() => handleSettingsChange('shrinkInterval', Math.max(5, shrinkInterval - 1))}
                 >
                   <MaterialIcons name="remove" size={20} color="white" />
                 </TouchableOpacity>
                 <Text style={styles.durationText}>{shrinkInterval}</Text>
                 <TouchableOpacity 
                   style={styles.durationButton}
-                  onPress={() => setShrinkInterval(shrinkInterval + 1)}
+                  onPress={() => handleSettingsChange('shrinkInterval', shrinkInterval + 1)}
                 >
                   <MaterialIcons name="add" size={20} color="white" />
                 </TouchableOpacity>
@@ -230,7 +285,7 @@ export default function WaitingScreen() {
               style={styles.saveButton}
               onPress={() => setShowSettings(false)}
             >
-              <Text style={styles.buttonText}>Save Settings</Text>
+              <Text style={styles.buttonText}>Close Settings</Text>
             </TouchableOpacity>
           </View>
         </View>
