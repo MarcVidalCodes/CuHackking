@@ -174,12 +174,12 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
           setMyLocation(location);
           socketService.updateLocation(location);
           
-          // Set up location watcher
+          // Set up location watcher with HIGH accuracy
           locationSubscription.current = await Location.watchPositionAsync(
             {
-              accuracy: Location.Accuracy.Balanced,
-              timeInterval: 30000, // 30 seconds between updates
-              distanceInterval: 10, // Only update if moved at least 10 meters
+              accuracy: Location.Accuracy.BestForNavigation, // Change from Balanced to highest accuracy
+              timeInterval: 1000, // Update every 1 second, not 2 seconds
+              distanceInterval: 0.1, // Update with tiny movements (0.1 meters)
             },
             (locationUpdate) => {
               const newLocation = {
@@ -189,7 +189,7 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
               console.log("Location update:", newLocation);
               setMyLocation(newLocation);
               
-              // Only send location updates every 30 seconds
+              // Send location updates EVERY time
               socketService.updateLocation(newLocation);
             }
           );

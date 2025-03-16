@@ -37,8 +37,8 @@ let gameState = {
 
 // Change these variables near the top of your server file
 let lastTagTime = 0;
-const TAG_COOLDOWN = 30000; // 30 seconds cooldown
-const TAG_DISTANCE = 0.0005; // Increase to ~50 meters (was likely too small before)
+const TAG_COOLDOWN = 0; // 30 seconds cooldown
+const TAG_DISTANCE = 1; // Explicitly 20 meters
 
 // Make sure the calculateDistance function is implemented:
 function calculateDistance(loc1, loc2) {
@@ -57,7 +57,8 @@ function calculateDistance(loc1, loc2) {
           Math.sin(lngDiff/2) * Math.sin(lngDiff/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   
-  return R * c / 111000; // Convert meters to approximate coordinate distance
+  // Return distance in actual meters, not coordinate units
+  return R * c;
 }
 
 // Socket.IO connection handler
@@ -288,7 +289,7 @@ io.on('connection', (socket) => {
       
       // Calculate distance
       const distance = calculateDistance(currentPlayer.location, p.location);
-      console.log(`Distance to ${p.username}: ${distance} (threshold: ${TAG_DISTANCE})`);
+      console.log(`Distance to ${p.username}: ${Math.round(distance)}m (threshold: ${TAG_DISTANCE}m)`);
       return distance < TAG_DISTANCE;
     });
     
@@ -393,7 +394,7 @@ let lastUpdateBroadcast = Date.now();
 // Create a throttled version of the broadcast
 const throttledEmitUpdate = () => {
   const now = Date.now();
-  if (now - lastUpdateBroadcast > 5000) { // 5 seconds between broadcasts (instead of 2)
+  if (now - lastUpdateBroadcast > 2000) { // 2 seconds between broadcasts (instead of 5)
     io.emit('updatePlayers', gameState.players);
     lastUpdateBroadcast = now;
   }
