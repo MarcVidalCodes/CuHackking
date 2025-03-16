@@ -41,10 +41,6 @@ interface CurrentUser {
 
 interface GameSettings {
   duration: number; // in minutes
-  initialCircleSize?: number; // Add initialCircleSize to the interface
-  circleShrinkPercent?: number; // Percentage the circle shrinks by (e.g., 80 for 80%)
-  shrinkDuration?: number; // How many seconds it takes for the circle to shrink
-  shrinkInterval?: number; // How many seconds between circle shrinks
 }
 
 interface LocationContextType {
@@ -65,7 +61,6 @@ interface LocationContextType {
   singlePlayerMode: boolean;
   startSinglePlayerGame: (username: string, aiCount: number, difficulty: string, duration: number) => void;
   resetGame: () => void;
-  gameSettings: GameSettings; // Add gameSettings to the context type
 }
 
 const LocationContext = createContext<LocationContextType | null>(null);
@@ -78,13 +73,7 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [lastTagMessage, setLastTagMessage] = useState<string | null>(null);
-  const [gameSettings, setGameSettings] = useState<GameSettings>({ 
-    duration: 5,
-    initialCircleSize: 100, // Set default value
-    circleShrinkPercent: 30, // Changed default from 80 to 30
-    shrinkDuration: 30, // Changed from 5 to 30 seconds
-    shrinkInterval: 10 // Default to 10 seconds between shrinks
-  });
+  const [gameSettings, setGameSettings] = useState<GameSettings>({ duration: 5 });
   const [gameTimeRemaining, setGameTimeRemaining] = useState<number | null>(null);
   const [singlePlayerMode, setSinglePlayerMode] = useState(false);
   const [aiUpdateInterval, setAiUpdateInterval] = useState<NodeJS.Timeout | null>(null);
@@ -370,10 +359,10 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
     if (!gameStarted || !myLocation || !currentUser) {
       return;
     }
-  
+
     const me = players.find(p => p.id === currentUser.id);
     if (!me) return;
-  
+
     // For multiplayer mode, use the socketService
     if (!singlePlayerMode) {
       socketService.emit('checkTag');
@@ -400,28 +389,10 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
           console.log(`Tagged AI player: ${player.username} at distance ${distance}m`);
           
           // Update players list - make the AI player "it" and current player not "it"
-          setPlayers(prevPlayers => {
-            // Create a fully new array
-            const updatedPlayers = prevPlayers.map(p => {
-              if (p.id === player.id) {
-                return {...p, isIt: true}; // Tagged player becomes "it"
-              } else if (p.id === currentUser.id) {
-                return {...p, isIt: false}; // Human player is no longer "it"
-              } else {
-                return {...p, isIt: false}; // No one else is "it"
-              }
-            });
-            
-            // Force update the AI targets after a tag
-            setTimeout(() => {
-              const humanPlayer = updatedPlayers.find(p => p.id === currentUser.id);
-              if (humanPlayer) {
-                aiPlayerManager.forceTargetUpdate(updatedPlayers, humanPlayer);
-              }
-            }, 100);
-            
-            return updatedPlayers;
-          });
+          setPlayers(prevPlayers => prevPlayers.map(p => ({
+            ...p,
+            isIt: p.id === player.id ? true : (p.id === currentUser.id ? false : p.isIt)
+          })));
           
           // Show tag message
           setLastTagMessage(`You tagged ${player.username}!`);
@@ -446,26 +417,10 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
           console.log(`AI player ${itPlayer.username} tagged you at distance ${distance}m`);
           
           // Update players list
-          setPlayers(prevPlayers => {
-            // Create a fully new array
-            const updatedPlayers = prevPlayers.map(p => {
-              if (p.id === currentUser.id) {
-                return {...p, isIt: true}; // Human becomes "it"
-              } else {
-                return {...p, isIt: false}; // No AI is "it"
-              }
-            });
-            
-            // Force update the AI targets after a tag
-            setTimeout(() => {
-              const humanPlayer = updatedPlayers.find(p => p.id === currentUser.id);
-              if (humanPlayer) {
-                aiPlayerManager.forceTargetUpdate(updatedPlayers, humanPlayer);
-              }
-            }, 100);
-            
-            return updatedPlayers;
-          });
+          setPlayers(prevPlayers => prevPlayers.map(p => ({
+            ...p,
+            isIt: p.id === currentUser.id ? true : (p.id === itPlayer.id ? false : p.isIt)
+          })));
           
           // Show tag message
           setLastTagMessage(`${itPlayer.username} tagged you!`);
@@ -619,8 +574,7 @@ export const LocationProvider: React.FC<{children: React.ReactNode}> = ({ childr
         updateGameSettings,
         singlePlayerMode,
         startSinglePlayerGame,
-        resetGame,
-        gameSettings // Expose gameSettings in the context
+        resetGame
       }}
     >
       {children}

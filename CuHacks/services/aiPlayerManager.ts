@@ -62,96 +62,46 @@ export class AIPlayerManager {
     humanPlayer: Player,
     allPlayers: Player[],
     onUpdate: (updatedPlayers: Player[]) => void,
-    gameRadius: number = 250
+    gameRadius: number = 250 // Default 250 meters radius
   ) {
-    // Clear existing intervals
+    // Clear any existing intervals
     this.stopUpdating();
     
-    // Set AI fallback behavior immediately so there's movement even without API
-    for (const aiPlayer of this.aiPlayers) {
-      // Initialize with default behavior
-      this.targetPositions[aiPlayer.id] = this.getDefaultTargetPosition(
-        aiPlayer, 
-        allPlayers, 
-        humanPlayer,
-        gameRadius
-      );
-    }
-    
-    // Update AI positions on a short interval regardless of API success
-    const movementInterval = 300; // Update every 300ms for smooth movement
-    this.movementInterval = setInterval(() => {
-      // Create a copy of the AI players to modify
-      const updatedPlayers: Player[] = [];
-      
-      // Update each AI player position, gradually moving toward targets
-      for (const aiPlayer of this.aiPlayers) {
-        const target = this.targetPositions[aiPlayer.id];
-        if (!target) continue;
-        
-        // Find current player to get latest state
-        const currentPlayer = allPlayers.find(p => p.id === aiPlayer.id) || aiPlayer;
-        
-        // Get interpolation speed based on difficulty
-        const speedFactor = currentPlayer.difficulty === 'easy' ? 0.05 :
-                           (currentPlayer.difficulty === 'hard' ? 0.15 : 0.1);
-        
-        // Move gradually toward target, with jitter for realism
-        const newLocation = {
-          latitude: currentPlayer.location.latitude + 
-                   (target.latitude - currentPlayer.location.latitude) * speedFactor +
-                   (Math.random() - 0.5) * 0.000001, // Add tiny jitter for realism
-          longitude: currentPlayer.location.longitude + 
-                   (target.longitude - currentPlayer.location.longitude) * speedFactor +
-                   (Math.random() - 0.5) * 0.000001
-        };
-        
-        updatedPlayers.push({
-          ...currentPlayer,
-          location: newLocation
-        });
+    // Initialize target positions if not set
+    this.aiPlayers.forEach(player => {
+      if (!this.targetPositions[player.id]) {
+        this.targetPositions[player.id] = player.location;
       }
-      
-      this.aiPlayers = updatedPlayers;
-      onUpdate(updatedPlayers);
-    }, movementInterval);
+    });
     
-    // Try API updates less frequently and with more robust fallback
+    // Set up major direction updates via API (every 30 seconds)
     this.updateInterval = setInterval(async () => {
       const now = Date.now();
       
       // Only make API calls every 30 seconds
       if (now - this.lastApiUpdate >= this.apiUpdateFrequency) {
         this.lastApiUpdate = now;
+        console.log("Making strategic AI position updates via API");
         
-        // Get latest player states
+        // Get fresh copies of players
         const currentHuman = allPlayers.find(p => p.id === humanPlayer.id) || humanPlayer;
         const currentPlayers = allPlayers;
         
-        console.log("Computing AI target positions...");
-        
-        // Set new target positions for each AI player - try API but fallback to logic
+        // Update target positions for each AI player
         for (const aiPlayer of this.aiPlayers) {
           try {
-            // Try to get strategic move from API
-            const newTarget = await Promise.race([
-              geminiAIService.getNextMove(
-                aiPlayer, 
-                currentPlayers,
-                currentHuman,
-                gameRadius
-              ),
-              // Timeout after 5 seconds to prevent blocking
-              new Promise<Coordinates>((_, reject) => 
-                setTimeout(() => reject(new Error("API timeout")), 5000)
-              )
-            ]);
+            // Get a new target position from the AI service
+            const newPosition = await geminiAIService.getNextMove(
+              aiPlayer, 
+              currentPlayers,
+              currentHuman,
+              gameRadius
+            );
             
             // Store as target position
-            this.targetPositions[aiPlayer.id] = newTarget;
-            
+            this.targetPositions[aiPlayer.id] = newPosition;
           } catch (e) {
-            console.log(`Using fallback AI movement for ${aiPlayer.username}`);
+            console.error(`AI strategy error for ${aiPlayer.username}:`, e);
             // If API fails, use default behavior
             this.targetPositions[aiPlayer.id] = this.getDefaultTargetPosition(
               aiPlayer, 
@@ -163,6 +113,36 @@ export class AIPlayerManager {
         }
       }
     }, 10000); // Check every 10 seconds
+    
+    // Set up smooth interpolation movements (every second)
+    this.movementInterval = setInterval(() => {
+      const updatedPlayers: Player[] = [];
+      
+      // Update each AI player's position gradually toward target
+      for (const aiPlayer of this.aiPlayers) {
+        const target = this.targetPositions[aiPlayer.id];
+        if (!target) continue;
+        
+        // Find the current player to get latest state
+        const currentPlayer = allPlayers.find(p => p.id === aiPlayer.id) || aiPlayer;
+        
+        // Interpolate toward target position with slight randomness
+        const interpolatedPosition = this.interpolatePosition(
+          currentPlayer.location,
+          target,
+          0.1, // Move 10% of the way to the target
+          aiPlayer.difficulty || 'medium'
+        );
+        
+        updatedPlayers.push({
+          ...currentPlayer,
+          location: interpolatedPosition
+        });
+      }
+      
+      this.aiPlayers = updatedPlayers;
+      onUpdate(updatedPlayers);
+    }, this.movementUpdateFrequency);
   }
   
   private interpolatePosition(
@@ -190,107 +170,44 @@ export class AIPlayerManager {
     aiPlayer: Player, 
     allPlayers: Player[], 
     humanPlayer: Player,
-    gameRadius: number
+    gameRadius: number = 250
   ): Coordinates {
-    // Get current position
+    // Get the current position
     const current = aiPlayer.location;
     
-    let moveX = 0;
-    let moveY = 0;
+    // Simple algorithm for when API fails
+    const moveDirection = { lat: 0, lng: 0 };
     
-    // Find who is "it"
-    const itPlayer = allPlayers.find(p => p.isIt);
-    if (!itPlayer) return current;
-    
-    // AI behavior depends on who is "it"
     if (aiPlayer.isIt) {
-      // If this AI is "it", target the human player
-      const targetPlayer = humanPlayer;
-      
-      // Calculate vector toward target player
-      moveX = targetPlayer.location.longitude - current.longitude;
-      moveY = targetPlayer.location.latitude - current.latitude;
+      // If AI is "it", move toward human player
+      moveDirection.lat = humanPlayer.location.latitude > current.latitude ? 1 : -1;
+      moveDirection.lng = humanPlayer.location.longitude > current.longitude ? 1 : -1;
     } else {
-      // If AI is NOT "it", avoid whoever is "it"
-      // Calculate vector away from "it" player
-      moveX = current.longitude - itPlayer.location.longitude;
-      moveY = current.latitude - itPlayer.location.latitude;
-      
-      // If IT player is very close, run away faster
-      const distToIt = this.getDistance(current, itPlayer.location);
-      if (distToIt < 50) { // 50 meters
-        moveX *= 3;
-        moveY *= 3;
-      }
+      // If AI is not "it", move away from whoever is "it"
+      const itPlayer = allPlayers.find(p => p.isIt) || humanPlayer;
+      moveDirection.lat = itPlayer.location.latitude > current.latitude ? -1 : 1;
+      moveDirection.lng = itPlayer.location.longitude > current.longitude ? -1 : 1;
     }
     
-    // Normalize the vector (convert to unit vector)
-    const magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
-    if (magnitude > 0) {
-      moveX /= magnitude;
-      moveY /= magnitude;
-    }
+    // Add some randomness
+    moveDirection.lat += (Math.random() - 0.5) * 0.5;
+    moveDirection.lng += (Math.random() - 0.5) * 0.5;
     
-    // Add some randomness to make movement less predictable
-    moveX += (Math.random() - 0.5) * 0.3;
-    moveY += (Math.random() - 0.5) * 0.3;
+    // Make larger movements by multiplying the speed
+    const speedMultiplier = aiPlayer.difficulty === 'hard' ? 0.0002 : 
+                           (aiPlayer.difficulty === 'easy' ? 0.00005 : 0.0001);
     
-    // Keep speed consistent based on difficulty
-    const speedMultiplier = aiPlayer.difficulty === 'easy' ? 0.00005 :
-                           (aiPlayer.difficulty === 'hard' ? 0.0002 : 0.0001);
-    
-    // Calculate new position
-    let newPos = {
-      latitude: current.latitude + moveY * speedMultiplier,
-      longitude: current.longitude + moveX * speedMultiplier
+    const newPosition = {
+      latitude: current.latitude + (moveDirection.lat * speedMultiplier),
+      longitude: current.longitude + (moveDirection.lng * speedMultiplier)
     };
     
-    // ENFORCE BOUNDARY: Check if new position would leave game area
-    const distanceToCenter = this.getDistance(newPos, humanPlayer.location);
-    
-    if (distanceToCenter > gameRadius * 0.95) {
-      // If too close to boundary, adjust to move back toward center
-      const centerDir = {
-        x: humanPlayer.location.longitude - newPos.longitude,
-        y: humanPlayer.location.latitude - newPos.latitude
-      };
-      
-      // Normalize
-      const centerMag = Math.sqrt(centerDir.x * centerDir.x + centerDir.y * centerDir.y);
-      if (centerMag > 0) {
-        centerDir.x /= centerMag;
-        centerDir.y /= centerMag;
-      }
-      
-      // Move toward center - stronger adjustment as you get closer to boundary
-      const boundaryForce = Math.min(1, (distanceToCenter - gameRadius * 0.8) / (gameRadius * 0.15));
-      moveX = moveX * (1 - boundaryForce) + centerDir.x * boundaryForce;
-      moveY = moveY * (1 - boundaryForce) + centerDir.y * boundaryForce;
-      
-      // Recalculate position with boundary adjustment
-      newPos = {
-        latitude: current.latitude + moveY * speedMultiplier,
-        longitude: current.longitude + moveX * speedMultiplier
-      };
-    }
-    
-    return newPos;
-  }
-  
-  // Helper to calculate distance between coordinates in meters
-  private getDistance(coord1: Coordinates, coord2: Coordinates): number {
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = coord1.latitude * Math.PI/180;
-    const φ2 = coord2.latitude * Math.PI/180;
-    const Δφ = (coord2.latitude-coord1.latitude) * Math.PI/180;
-    const Δλ = (coord2.longitude-coord1.longitude) * Math.PI/180;
-  
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  
-    return R * c; // Distance in meters
+    // Use the geminiAIService boundary check (reuse their functionality)
+    return geminiAIService['ensureWithinBoundary'](
+      newPosition,
+      humanPlayer.location,
+      gameRadius
+    );
   }
   
   stopUpdating() {
@@ -307,23 +224,6 @@ export class AIPlayerManager {
   
   getAIPlayers(): Player[] {
     return this.aiPlayers;
-  }
-
-  // Add this method to aiPlayerManager
-  forceTargetUpdate(allPlayers: Player[], humanPlayer: Player) {
-    console.log("Forcing AI target update after game state change");
-    
-    for (const aiPlayer of this.aiPlayers) {
-      this.targetPositions[aiPlayer.id] = this.getDefaultTargetPosition(
-        aiPlayer,
-        allPlayers,
-        humanPlayer,
-        250 // Default game radius
-      );
-    }
-    
-    // Also reset the API update timer
-    this.lastApiUpdate = 0;
   }
 }
 
